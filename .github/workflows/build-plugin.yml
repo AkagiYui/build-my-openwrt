@@ -26,8 +26,10 @@ jobs:
               cp -r /src/luci-app-rootfs-resize package/luci-app-rootfs-resize
               make defconfig > /dev/null
               make package/luci-app-rootfs-resize/compile V=s 2>&1 | tail -25
-              cp bin/packages/x86_64/packages/luci-app-rootfs-resize*.apk /src/out/ 2>/dev/null \
-                || { echo "NO APK FOUND"; ls bin/packages/x86_64/packages/ | head; exit 1; }
+              # 产物在 bin/packages/x86_64/<SECTION>/ 下（此处为 base/），用 find 兜底
+              APK=$(find /builder/bin -name "luci-app-rootfs-resize*.apk" | head -1)
+              [ -n "$APK" ] || { echo "NO APK FOUND"; find /builder/bin -maxdepth 4 -type d | head; exit 1; }
+              cp "$APK" /src/out/
             '
           ls -lh out/
 
