@@ -37,7 +37,12 @@ detect() {
 	_part_sz=$(cat "/sys/block/$(basename "$_disk")/$_bn/size" 2>/dev/null || echo 0)
 	_loop_sz=$(cat "/sys/block/$(basename "$_overlay_loop")/size" 2>/dev/null || echo 0)
 
-	# 5. overlay 文件系统用量 (KB)
+	# 5. 预计可扩容空间：磁盘容量 - 当前 overlay 文件系统容量（扇区）
+	#    （parted 扩分区 + losetup 刷新 + resize2fs 后文件系统最多长到磁盘末尾）
+	_free_sz=$((_disk_sz - _loop_sz))
+	[ "$_free_sz" -lt 0 ] && _free_sz=0
+
+	# 6. overlay 文件系统用量 (KB)
 	_ovl_size=$(df -k /overlay 2>/dev/null | awk 'NR==2{print $2}')
 	_ovl_used=$(df -k /overlay 2>/dev/null | awk 'NR==2{print $3}')
 	_ovl_avail=$(df -k /overlay 2>/dev/null | awk 'NR==2{print $4}')
@@ -50,8 +55,8 @@ print_json() {
 	_ok="$1"; _can="$2"; _msg="$3"
 	printf '{"ok":%s,"loop":"%s","partdev":"%s","disk":"%s","part":"%s",' \
 		"$_ok" "$_overlay_loop" "$_partdev" "$_disk" "$_part"
-	printf '"disk_sectors":%s,"part_sectors":%s,"loop_sectors":%s,' \
-		"${_disk_sz:-0}" "${_part_sz:-0}" "${_loop_sz:-0}"
+	printf '"disk_sectors":%s,"part_sectors":%s,"loop_sectors":%s,"free_sectors":%s,' \
+		"${_disk_sz:-0}" "${_part_sz:-0}" "${_loop_sz:-0}" "${_free_sz:-0}"
 	printf '"ovl_size_kb":%s,"ovl_used_kb":%s,"ovl_avail_kb":%s,' \
 		"${_ovl_size:-0}" "${_ovl_used:-0}" "${_ovl_avail:-0}"
 	printf '"can_resize":%s,"message":"%s"}\n' "$_can" "$_msg"

@@ -1,0 +1,89 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: luci-app-rootfs-resize\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: zh-cn\n"
+
+msgid "Confirm resize"
+msgstr "确认扩容"
+
+msgid "The partition backing /overlay will be extended to the full disk and the filesystem will be resized online. Do not power off during the operation."
+msgstr "将把 /overlay 所在分区扩展到整个磁盘，并在线扩容文件系统。操作期间请勿断电。"
+
+msgid "Resizing..."
+msgstr "扩容中..."
+
+msgid "Resize failed: "
+msgstr "扩容失败: "
+
+msgid "Detection failed: "
+msgstr "检测失败: "
+
+msgid "Free disk space detected, one-click resize is available."
+msgstr "检测到磁盘可用空间，可以一键扩容。"
+
+msgid "Only %s can be gained. For a meaningful expansion, enlarge the disk first in the hypervisor / disk management."
+msgstr "仅能扩展约 %s。如需明显扩容，请先在宿主机/磁盘管理中扩大磁盘。"
+
+msgid "The partition already fills the whole disk. Enlarge the disk first in the hypervisor / disk management."
+msgstr "分区已占满整个磁盘，无法扩容（请先在宿主机/磁盘管理中扩大磁盘）。"
+
+msgid "Item"
+msgstr "项目"
+
+msgid "Value"
+msgstr "数值"
+
+msgid "Description"
+msgstr "说明"
+
+msgid "Disk device"
+msgstr "磁盘设备"
+
+msgid "Whole virtual disk containing the GPT partition table"
+msgstr "承载 GPT 分区表的整个虚拟磁盘"
+
+msgid "Root partition"
+msgstr "根分区"
+
+msgid "Partition holding /rom and /overlay"
+msgstr "承载 /rom 与 /overlay 的分区"
+
+msgid "Disk size"
+msgstr "磁盘大小"
+
+msgid "Total physical disk capacity assigned to the VM"
+msgstr "虚拟机分配的物理磁盘总容量"
+
+msgid "Partition size"
+msgstr "分区大小"
+
+msgid "Currently used portion of the disk"
+msgstr "当前分区已占用的磁盘容量"
+
+msgid "Overlay filesystem"
+msgstr "overlay 文件系统"
+
+msgid "Actual size of the filesystem mounted on /overlay"
+msgstr "/overlay 挂载的文件系统实际大小"
+
+msgid "Overlay usage"
+msgstr "overlay 用量"
+
+msgid "Used / total capacity of /overlay"
+msgstr "/overlay 已用容量 / 总容量"
+
+msgid "Resizable space"
+msgstr "预计可扩容空间"
+
+msgid "Space expected to be gained after one-click resize"
+msgstr "点击一键扩容后预计新增的可用空间"
+
+msgid "Resize now"
+msgstr "一键扩容"
+
+msgid "Rootfs / Overlay Resize"
+msgstr "Rootfs / Overlay 扩容"
+
+msgid "Detect and extend the partition and filesystem backing /overlay, abstracted from the PVE deployment workflow. No reboot required."
+msgstr "检测并扩展 overlay 所在分区与文件系统，抽象自 PVE 部署流程，无需重启。"

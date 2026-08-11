@@ -1,0 +1,5 @@
+#!/bin/sh
+# 注册插件翻译到 LuCI 语言选择器（幂等；若已存在则覆盖为同一值）
+uci -q set luci.languages.zh_cn='简体中文 (Simplified Chinese)'
+uci -q commit luci
+exit 0

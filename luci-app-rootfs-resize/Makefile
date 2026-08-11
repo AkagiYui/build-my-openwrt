@@ -1,28 +1,21 @@
 # luci-app-rootfs-resize
 # 纯 shell + ucode + JS 的 LuCI 插件：一键扩容 overlay 所在分区与文件系统
+# 抽象自 PVE 部署流程: parted resizepart -> losetup -c -> resize2fs（在线，无需重启）
+#
 # 纯 Makefile 写法（不依赖 feeds/luci/luci.mk），可在官方 SDK 中直接编译
 # 产物为 .apk（OpenWrt 25.12 apk 体系，架构无关 all）
+# i18n: po/ 是源码，CI 用宿主持编译的 po2lmo 生成 i18n/*.lmo 后再打包（.lmo 不入 git）
 
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-rootfs-resize
-PKG_VERSION:=1.0.0
+PKG_VERSION:=1.1.0
 PKG_RELEASE:=1
 
 PKG_LICENSE:=GPL-2.0-or-later
 PKG_MAINTAINER:=AkagiYui <dev@example.com>
 
 include $(INCLUDE_DIR)/package.mk
-
-# 纯文件包（无源码）：跳过 configure/compile，仅执行 install 段
-define Build/Prepare
-endef
-
-define Build/Configure
-endef
-
-define Build/Compile
-endef
 
 define Package/$(PKG_NAME)
 	SECTION:=luci
@@ -36,6 +29,16 @@ define Package/$(PKG_NAME)/description
 	Detect and resize the partition and filesystem backing /overlay,
 	abstracted from the PVE deployment workflow:
 	parted resizepart -> losetup -c -> resize2fs (online, no reboot).
+endef
+
+# 纯文件包（无源码）：跳过 configure/compile，仅执行 install 段
+define Build/Prepare
+endef
+
+define Build/Configure
+endef
+
+define Build/Compile
 endef
 
 define Package/$(PKG_NAME)/install
@@ -53,6 +56,14 @@ define Package/$(PKG_NAME)/install
 
 	$(INSTALL_DIR) $(1)/www/luci-static/resources/view/rootfsresize
 	$(INSTALL_DATA) ./htdocs/luci-static/resources/view/rootfsresize/overview.js $(1)/www/luci-static/resources/view/rootfsresize/
+
+	$(INSTALL_DIR) $(1)/etc/uci-defaults
+	$(INSTALL_DATA) ./root/etc/uci-defaults/50-rootfs-resize $(1)/etc/uci-defaults/
+
+	ifneq ($(wildcard ./i18n/*.lmo),)
+		$(INSTALL_DIR) $(1)/usr/lib/lua/luci/i18n
+		$(INSTALL_DATA) $(wildcard ./i18n/*.lmo) $(1)/usr/lib/lua/luci/i18n/
+	endif
 endef
 
 define Package/$(PKG_NAME)/postinst
