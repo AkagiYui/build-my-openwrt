@@ -25,10 +25,24 @@ Image Builder 是官方 buildbot 完成前三层后只把"组装"留给你的产
 | uci 设置 Asia/Singapore `<+08>-8` | `files/etc/config/system` |
 | 修改 IP / 网关 / DNS | `files/etc/config/network`（默认 192.168.1.1，改这里） |
 | `parted` 扩分区（文档步骤） | PACKAGES（为未来的 luci 一键扩容插件预装） |
+| OpenClash 代理插件 | PACKAGES（clash 核心运行时下载，镜像内不含） |
+| luci-theme-argon 主题 + argon-config | PACKAGES（自带 uci-defaults 自动设为默认主题） |
 
 > 官方 x86/64 镜像默认自带 LuCI 全家桶（`luci-ssl` 等），无需重复添加。
 > `files/etc/profile` **不要**整体覆盖——官方 profile 里的 `%PATH%` 是构建时替换的
 > 占位符；通过 `/etc/profile.d/*.sh`（官方 profile 自动 source）追加即可。
+
+## 第三方包机制
+
+OpenClash / Argon 不在官方 feed 里，workflow 构建时用 `gh release download` 拉取
+官方 release 的 **noarch `.apk`** 资产，放进 Image Builder 的 `packages/` 目录——
+该目录是官方支持的机制（`README.apk.md`：放入的 `.apk` 会被 `apk mkndx` 生成本地索引并安装）。
+
+- **OpenClash**：跟随 `vernesong/OpenClash` latest release（.apk + .ipk 双资产，取 .apk）。
+  clash 核心（mihomo）**运行时才下载**：首次使用到插件设置页的"版本更新"里确认/下载内核。
+- **Argon**：跟随 `jerrykuku/luci-theme-argon` latest release，含主题、配置 app、中文语言包；
+  装完自动设为默认主题（自带的 `/etc/uci-defaults/30_luci-theme-argon`）。
+- 想锁版本：把 `--pattern` 换成具体文件名，或加 `--tag v0.47.156` 等。
 
 ## 产物
 

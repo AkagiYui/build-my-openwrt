@@ -35,6 +35,22 @@ jobs:
           tar --zstd -xf "${IB}.tar.zst"
           mv "${IB}" imagebuilder
 
+      # 第三方包（不在官方 feed 里）: 官方 Image Builder 支持把 .apk 放进 packages/ 目录，
+      # 构建时自动 apk mkndx 生成本地索引（见 openwrt README.apk.md）。
+      # OpenClash 与 argon 的官方 release 均提供 noarch 的 .apk 资产，取最新即可。
+      - name: Download third-party packages (OpenClash / Argon)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p imagebuilder/packages
+          gh release download --repo vernesong/OpenClash --pattern '*.apk' --dir imagebuilder/packages
+          gh release download --repo jerrykuku/luci-theme-argon \
+            --pattern 'luci-theme-argon-*.apk' \
+            --pattern 'luci-app-argon-config-*.apk' \
+            --pattern 'luci-i18n-argon-config-*.apk' \
+            --dir imagebuilder/packages
+          ls -lh imagebuilder/packages/
+
       # 默认 profile=generic 即产出 squashfs-combined-efi.img.gz（官方默认 CONFIG_GRUB_EFI_IMAGES=y）。
       # PACKAGES：把初始化文档里的运行时 apk add 提前固化进镜像
       #   - luci-i18n-base-zh-cn  中文界面
@@ -43,11 +59,21 @@ jobs:
       #   - losetup / resize2fs  扩容 overlay 所需（losetup -c / resize2fs）
       #   - parted               扩分区（为未来的 luci 一键扩容插件准备）
       #   - btop                 系统监控
+      # 第三方：
+      #   - luci-app-openclash   代理插件（clash 核心运行时下载，镜像内不含）
+      #   - luci-theme-argon     主题（自带 uci-defaults 自动设为默认主题）
+      #   - luci-app-argon-config + 中文语言包
+      # OpenClash 运行时依赖显式补齐（apk 元数据未含全部运行时依赖）：
+      #   dnsmasq-full / luci-compat / bash / curl / ca-bundle / ip-full /
+      #   ruby / ruby-yaml / kmod-tun / kmod-inet-diag / kmod-nft-tproxy / unzip
       # FILES：把初始化文档里的配置改动固化（network / system / profile.d）
       - name: Build image
         run: |
           make image PROFILE=generic \
-            PACKAGES="luci-i18n-base-zh-cn block-mount openssh-sftp-server losetup resize2fs parted btop" \
+            PACKAGES="luci-i18n-base-zh-cn block-mount openssh-sftp-server losetup resize2fs parted btop \
+              luci-app-openclash luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn \
+              dnsmasq-full luci-compat bash curl ca-bundle ip-full ruby ruby-yaml \
+              kmod-tun kmod-inet-diag kmod-nft-tproxy unzip" \
             FILES="$GITHUB_WORKSPACE/files"
         working-directory: imagebuilder
 
