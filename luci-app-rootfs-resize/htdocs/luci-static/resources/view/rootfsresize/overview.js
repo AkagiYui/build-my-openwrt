@@ -31,23 +31,29 @@ return view.extend({
 	},
 
 	runResize: function() {
-		return ui.showConfirm(
-			_('Confirm resize'),
-			_('The partition backing /overlay will be extended to the full disk and the filesystem will be resized online. Do not power off during the operation.')
-		).then(function(ok) {
-			if (!ok)
-				return;
-			ui.showLoading(_('Resizing...'));
-			return callResize().finally(function() {
-				ui.hideLoading();
-			}).then(function(res) {
-				if (res && res.log)
-					ui.addNotification(null, E('pre', {}, res.log));
-				if (res && !res.ok && res.error)
-					ui.addNotification(null, E('div', { 'class': 'alert alert-danger' }, _('Resize failed: ') + res.error));
-				window.location.reload();
-			});
-		});
+		// 注意：luci 没有 ui.showConfirm/showLoading（v1.1.0 曾用它导致点击即
+		// TypeError、请求根本没发出）。确认框用官方 L.showModal + 按钮触发。
+		L.showModal(_('Confirm resize'), [
+			E('div', _('The partition backing /overlay will be extended to the full disk and the filesystem will be resized online. Do not power off during the operation.')),
+			E('div', { 'class': 'right' }, [
+				E('div', { 'class': 'btn', 'click': L.hideModal }, _('Cancel')),
+				' ',
+				E('div', { 'class': 'btn primary', 'click': function() {
+					ui.hideModal();
+					ui.addTimeLimitedNotification(_('Resizing...'), [], 10000, 'info');
+					callResize().then(function(res) {
+						if (res && res.log)
+							ui.addNotification(null, E('pre', res.log));
+						if (res && !res.ok && res.error)
+							ui.addNotification(null, E('div', { 'class': 'alert alert-danger' }, _('Resize failed: ') + res.error));
+						window.location.reload();
+					}).catch(function(e) {
+						ui.addNotification(null, E('div', { 'class': 'alert alert-danger' }, _('Resize failed: ') + (e.message || e)));
+						window.location.reload();
+					});
+				}}, _('Resize now'))
+			])
+		]);
 	},
 
 	render: function(data) {
