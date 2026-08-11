@@ -63,7 +63,26 @@ jobs:
           done
           ls -lh imagebuilder/packages/
 
+      # 预置 mihomo (meta) 核心，OpenClash 开箱即用。
+      # - compatible 版对 PVE 虚拟机（老指令集 CPU）兼容性最好
+      # - OpenClash 期望的核心路径: /etc/openclash/core/clash_meta（官方 release notes 指定）
+      # - 通过 FILES 机制写入（imagebuilder 的 file_copy 用 cp -fpR，保留可执行权限）
+      - name: Embed mihomo (meta) core into image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p files/etc/openclash/core
+          gh release download --repo MetaCubeX/mihomo \
+            --pattern 'mihomo-linux-amd64-compatible-*.gz' \
+            --dir /tmp/mihomo --clobber
+          gz="$(ls /tmp/mihomo/mihomo-linux-amd64-compatible-*.gz | head -1)"
+          gunzip -c "$gz" > files/etc/openclash/core/clash_meta
+          chmod +x files/etc/openclash/core/clash_meta
+          files/etc/openclash/core/clash_meta -v
+          echo "mihomo core: $(basename "$gz" .gz)"
+
       # 默认 profile=generic 即产出 squashfs-combined-efi.img.gz（官方默认 CONFIG_GRUB_EFI_IMAGES=y）。
+      # ROOTFS_PARTSIZE=256：默认 104MB，OpenClash+mihomo 后 squashfs+overlay 会吃紧，调大留余量。
       # PACKAGES：把初始化文档里的运行时 apk add 提前固化进镜像
       #   - luci-i18n-base-zh-cn  中文界面
       #   - block-mount          挂载点/overlay 工具
@@ -82,6 +101,7 @@ jobs:
       - name: Build image
         run: |
           make image PROFILE=generic \
+            ROOTFS_PARTSIZE=256 \
             PACKAGES="luci-i18n-base-zh-cn block-mount openssh-sftp-server losetup resize2fs parted btop \
               luci-app-openclash luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn \
               dnsmasq-full luci-compat bash curl ca-bundle ip-full ruby ruby-yaml \
