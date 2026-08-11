@@ -19,7 +19,8 @@ jobs:
       # 官方构建链：lemon(parser generator) -> plural_formula.c/h -> po2lmo
       - name: Compile .lmo translations from po sources
         run: |
-          mkdir -p /tmp/po2lmo-build/lib /tmp/po2lmo-build/contrib luci-app-rootfs-resize/i18n
+          mkdir -p /tmp/po2lmo-build/lib /tmp/po2lmo-build/contrib \
+            luci-app-rootfs-resize/root/usr/lib/lua/luci/i18n
           cd /tmp/po2lmo-build
           curl -sf -O https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/src/po2lmo.c
           curl -sf -o lib/lmo.c  https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/src/lib/lmo.c
@@ -33,9 +34,9 @@ jobs:
           gcc -w -O2 -o po2lmo po2lmo.c lib/lmo.c lib/plural_formula.c
           for po in "$GITHUB_WORKSPACE"/luci-app-rootfs-resize/po/*/*.po; do
             lang="$(basename "$(dirname "$po")")"
-            ./po2lmo "$po" "$GITHUB_WORKSPACE/luci-app-rootfs-resize/i18n/rootfs-resize.${lang}.lmo"
+            ./po2lmo "$po" "$GITHUB_WORKSPACE/luci-app-rootfs-resize/root/usr/lib/lua/luci/i18n/rootfs-resize.${lang}.lmo"
           done
-          ls -lh "$GITHUB_WORKSPACE/luci-app-rootfs-resize/i18n/"
+          ls -lh "$GITHUB_WORKSPACE/luci-app-rootfs-resize/root/usr/lib/lua/luci/i18n/"
 
       # 官方 OpenWrt 25.12.5 x86_64 SDK 容器（SDK 已预装，CONFIG_USE_APK=y 直接出 .apk）
       # 纯 Makefile 写法，无需 feeds update

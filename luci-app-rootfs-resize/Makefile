@@ -60,10 +60,10 @@ define Package/$(PKG_NAME)/install
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
 	$(INSTALL_DATA) ./root/etc/uci-defaults/50-rootfs-resize $(1)/etc/uci-defaults/
 
-	ifneq ($(wildcard ./i18n/*.lmo),)
-		$(INSTALL_DIR) $(1)/usr/lib/lua/luci/i18n
-		$(INSTALL_DATA) $(wildcard ./i18n/*.lmo) $(1)/usr/lib/lua/luci/i18n/
-	endif
+	if [ -d ./root/usr/lib/lua/luci/i18n ]; then \
+		$(INSTALL_DIR) $(1)/usr/lib/lua/luci/i18n; \
+		$(CP) ./root/usr/lib/lua/luci/i18n/* $(1)/usr/lib/lua/luci/i18n/; \
+	fi
 endef
 
 define Package/$(PKG_NAME)/postinst

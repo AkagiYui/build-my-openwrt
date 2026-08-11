@@ -5,3 +5,4 @@ files/etc/openclash/core/
 # 插件编译产物（本地下载目录）
 out/
 luci-app-rootfs-resize/i18n/
+luci-app-rootfs-resize/root/usr/lib/lua/luci/i18n/
