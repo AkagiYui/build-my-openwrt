@@ -42,6 +42,7 @@ OpenClash / Argon 不在官方 feed 里，workflow 构建时用 `gh release down
   clash 核心（mihomo）**运行时才下载**：首次使用到插件设置页的"版本更新"里确认/下载内核。
 - **Argon**：跟随 `jerrykuku/luci-theme-argon` latest release，含主题、配置 app、中文语言包；
   装完自动设为默认主题（自带的 `/etc/uci-defaults/30_luci-theme-argon`）。
+  workflow 会自动修复上游 i18n 包的文件名版本号 `.`→`~` 问题（apk 按索引推导文件名）。
 - 想锁版本：把 `--pattern` 换成具体文件名，或加 `--tag v0.47.156` 等。
 
 ## 产物

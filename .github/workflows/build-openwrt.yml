@@ -49,6 +49,18 @@ jobs:
             --pattern 'luci-app-argon-config-*.apk' \
             --pattern 'luci-i18n-argon-config-*.apk' \
             --dir imagebuilder/packages
+          # argon 上游 i18n 的 apk 文件名里版本号用 '.'，而包内索引是 '~'，
+          # apk 按索引推导要抓取的文件名，导致 "package mentioned in index not found"。
+          # 仅在“最后一段是 7 位 hex 短哈希”时把最后一个 '.' 改为 '~'（上游修复后自动跳过）。
+          for f in imagebuilder/packages/luci-i18n-argon-config-zh-cn-*.apk; do
+            [ -e "$f" ] || continue
+            case "$(basename "$f" .apk)" in
+              *~*) continue ;;
+              *.[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
+                b="$(basename "$f" .apk)"
+                mv "$f" "$(dirname "$f")/${b%.*}~${b##*.}.apk" ;;
+            esac
+          done
           ls -lh imagebuilder/packages/
 
       # 默认 profile=generic 即产出 squashfs-combined-efi.img.gz（官方默认 CONFIG_GRUB_EFI_IMAGES=y）。
