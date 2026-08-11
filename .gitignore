@@ -6,3 +6,4 @@ files/etc/openclash/core/
 out/
 luci-app-rootfs-resize/i18n/
 luci-app-rootfs-resize/root/usr/lib/lua/luci/i18n/
+out-local.apk
