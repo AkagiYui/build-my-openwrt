@@ -6,16 +6,15 @@
 const callStatus = rpc.declare({ object: 'rootfsresize', method: 'status' });
 const callResize = rpc.declare({ object: 'rootfsresize', method: 'resize' });
 
-function fmtSectors(n) {
-	if (!n || n <= 0)
+// luci-base 没有内置 L.formatBytes（tailscale 等 app 也是自己实现的）
+function formatBytes(bytes) {
+	bytes = parseInt(bytes, 10);
+	if (isNaN(bytes) || bytes <= 0)
 		return '-';
-	return L.formatBytes(n * 512);
-}
-
-function fmtKb(n) {
-	if (!n || n <= 0)
-		return '-';
-	return L.formatBytes(n * 1024);
+	var units = [ 'B', 'KiB', 'MiB', 'GiB', 'TiB' ], i = 0;
+	while (bytes >= 1024 && i < units.length - 1)
+		bytes /= 1024, i++;
+	return bytes.toFixed(i ? 1 : 0) + ' ' + units[i];
 }
 
 return view.extend({
@@ -58,10 +57,10 @@ return view.extend({
 		var tbl = E('table', { 'class': 'table' }, [
 			E('tr', [ E('td', {}, _('磁盘设备')), E('td', {}, s.disk || '-') ]),
 			E('tr', [ E('td', {}, _('根分区')), E('td', {}, s.partdev || '-') ]),
-			E('tr', [ E('td', {}, _('磁盘大小')), E('td', {}, fmtSectors(s.disk_sectors)) ]),
-			E('tr', [ E('td', {}, _('分区大小')), E('td', {}, fmtSectors(s.part_sectors)) ]),
-			E('tr', [ E('td', {}, _('overlay 文件系统')), E('td', {}, fmtSectors(s.loop_sectors)) ]),
-			E('tr', [ E('td', {}, _('overlay 用量')), E('td', {}, fmtKb(s.ovl_used_kb) + ' / ' + fmtKb(s.ovl_size_kb)) ]),
+			E('tr', [ E('td', {}, _('磁盘大小')), E('td', {}, formatBytes(s.disk_sectors * 512)) ]),
+			E('tr', [ E('td', {}, _('分区大小')), E('td', {}, formatBytes(s.part_sectors * 512)) ]),
+			E('tr', [ E('td', {}, _('overlay 文件系统')), E('td', {}, formatBytes(s.loop_sectors * 512)) ]),
+			E('tr', [ E('td', {}, _('overlay 用量')), E('td', {}, formatBytes(s.ovl_used_kb * 1024) + ' / ' + formatBytes(s.ovl_size_kb * 1024)) ]),
 		]);
 
 		var btn = E('button', {
