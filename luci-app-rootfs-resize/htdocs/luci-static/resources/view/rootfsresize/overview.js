@@ -68,9 +68,12 @@ return view.extend({
 		else if (s.can_resize)
 			stat = E('div', { 'class': 'alert alert-warning' },
 				_('Only %s can be gained. For a meaningful expansion, enlarge the disk first in the hypervisor / disk management.').replace('%s', formatBytes(freeBytes)));
-		else
+		else if (freeBytes <= 1024 * 1024)
 			stat = E('div', { 'class': 'alert alert-danger' },
 				_('The partition already fills the whole disk. Enlarge the disk first in the hypervisor / disk management.'));
+		else
+			stat = E('div', { 'class': 'alert alert-warning' },
+				_('Too little resizable space (%s). Enlarge the disk first in the hypervisor / disk management.').replace('%s', formatBytes(freeBytes)));
 
 		var tbl = E('table', { 'class': 'table' }, [
 			E('tr', [ E('th', {}, _('Item')), E('th', {}, _('Value')), E('th', {}, _('Description')) ]),

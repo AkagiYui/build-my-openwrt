@@ -68,12 +68,20 @@ status() {
 		printf '{"ok":false,"error":"%s"}\n' "$_err"
 		return 1
 	fi
-	if [ "$_part_sz" -lt "$_disk_sz" ]; then
-		_can=true
-		_msg="磁盘存在可用空间，可一键扩容"
-	else
+
+	# 阈值：可扩空间 < 512MiB 视为"过小"，禁止一键扩容（避免扩完 df 看不出变化）
+	_threshold=$((512 * 1024 * 1024 / 512))
+
+	if [ "$_part_sz" -ge "$_disk_sz" ]; then
 		_can=false
 		_msg="分区已占满整个磁盘，无法扩容（请先在宿主机/磁盘管理中扩大磁盘）"
+	elif [ "$_free_sz" -lt "$_threshold" ]; then
+		_can=false
+		_mb=$((_free_sz * 512 / 1024 / 1024))
+		_msg="可扩容空间过小（约 ${_mb}MiB），请先在宿主机/磁盘管理中扩大磁盘"
+	else
+		_can=true
+		_msg="检测到磁盘可用空间，可一键扩容"
 	fi
 	print_json true "$_can" "$_msg"
 }

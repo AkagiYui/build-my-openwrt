@@ -28,6 +28,9 @@ msgstr "仅能扩展约 %s。如需明显扩容，请先在宿主机/磁盘管�
 msgid "The partition already fills the whole disk. Enlarge the disk first in the hypervisor / disk management."
 msgstr "分区已占满整个磁盘，无法扩容（请先在宿主机/磁盘管理中扩大磁盘）。"
 
+msgid "Too little resizable space (%s). Enlarge the disk first in the hypervisor / disk management."
+msgstr "可扩容空间过小（约 %s），请先在宿主机/磁盘管理中扩大磁盘。"
+
 msgid "Item"
 msgstr "项目"
 
