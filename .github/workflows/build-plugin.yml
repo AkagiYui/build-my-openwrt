@@ -15,16 +15,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 用 po2lmo 把 po/ 源码编译成 .lmo（宿主持编译，纯 C 无外部依赖）
-      # 产物放入 luci-app-rootfs-resize/i18n/（不入 git），随包打进镜像
+      # 用 po2lmo 把 po/ 源码编译成 .lmo（宿主持编译，纯 C 标准依赖）
+      # 官方构建链：lemon(parser generator) -> plural_formula.c/h -> po2lmo
       - name: Compile .lmo translations from po sources
         run: |
-          mkdir -p /tmp/po2lmo-build luci-app-rootfs-resize/i18n
+          mkdir -p /tmp/po2lmo-build/lib /tmp/po2lmo-build/contrib luci-app-rootfs-resize/i18n
           cd /tmp/po2lmo-build
           curl -sf -O https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/src/po2lmo.c
-          curl -sf -O https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/src/lib/lmo.c
-          curl -sf -O https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/src/lib/lmo.h
-          gcc -O2 -o po2lmo po2lmo.c lmo.c
+          curl -sf -o lib/lmo.c  https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/src/lib/lmo.c
+          curl -sf -o lib/lmo.h  https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/src/lib/lmo.h
+          curl -sf -o lib/plural_formula.y https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/src/lib/plural_formula.y
+          curl -sf -o contrib/lemon.c   https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/src/contrib/lemon.c
+          curl -sf -o contrib/lempar.c  https://raw.githubusercontent.com/openwrt/luci/master/modules/luci-base/src/contrib/lempar.c
+          # lempar.c 是 lemon 的模板（运行时可被读取），不参与编译
+          cc -std=gnu17 -w -o contrib/lemon contrib/lemon.c
+          ./contrib/lemon -q lib/plural_formula.y
+          gcc -w -O2 -o po2lmo po2lmo.c lib/lmo.c lib/plural_formula.c
           for po in "$GITHUB_WORKSPACE"/luci-app-rootfs-resize/po/*/*.po; do
             lang="$(basename "$(dirname "$po")")"
             ./po2lmo "$po" "$GITHUB_WORKSPACE/luci-app-rootfs-resize/i18n/rootfs-resize.${lang}.lmo"
