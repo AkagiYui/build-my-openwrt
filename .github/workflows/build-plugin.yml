@@ -19,7 +19,7 @@ jobs:
       # 纯 shell/ucode/JS 包不依赖 luci feed，无需 feeds update
       - name: Build .apk in official SDK container
         run: |
-          mkdir -p out
+          mkdir -p out && chmod 777 out   # 容器内 -u buildbot 需要写权限
           docker run --rm -u buildbot -v "$PWD":/src -w /builder \
             ghcr.io/openwrt/sdk:x86_64-25.12.5 \
             /bin/bash -e -c '
