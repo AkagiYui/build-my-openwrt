@@ -75,6 +75,17 @@ PVE 部署参数（对应文档）：`--machine q35 --bios ovmf --efidisk0 ... -
 - **luci 插件**：用官方 SDK / `openwrt/gh-action-sdk` 把插件编成 `.apk` 发布，
   构建时通过自定义源加入 `PACKAGES`，无需源码全量编译。
 
+## 追官方更新
+
+官方更新对 Image Builder 体系 = **换一个版本号的预编译构建器 + 同版本包源**，内核/kmods 自动配套，无需手动处理。
+
+- 构建 workflow 的 `VERSION` 输入固定官方版本（默认 `25.12.5`），收到更新提醒后把它填成新版本号重建即可。
+- `.github/workflows/check-upstream.yml` 每周一 00:00 UTC 自动对比 OpenWrt 最新 stable 与当前默认版本：
+  - 有新版本 → 自动开 Issue（含发布说明链接与升级步骤）
+  - 已是最新 → 自动关闭残留的更新提醒 Issue
+  - 也可在 Actions 手动触发（Run workflow）
+- 每次换版本后只需复核两点：**PACKAGES 包名**在新版本源里仍存在（`block-mount` 在 targets feed、`resize2fs` 是独立包）；**`files/` 配置**点版本一般不变，大版本升级前先 diff 官方默认值。
+
 ## 限制（Image Builder 方案的边界）
 
 - 内核是预编译的：不能改内核 config / 打内核 patch / 加非官方 kmod（需源码全量编译）。

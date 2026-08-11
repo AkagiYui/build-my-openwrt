@@ -1,0 +1,79 @@
+name: Check OpenWrt upstream version
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'   # 每周一 00:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect current & latest OpenWrt version
+        id: versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 当前默认版本：从构建 workflow 读取（单一来源，避免两处维护漂移）
+          CURRENT="$(grep -oE "inputs\.version \|\| '[0-9.]+'" .github/workflows/build-openwrt.yml | grep -oE "[0-9.]+" | head -1)"
+          [ -n "$CURRENT" ] || CURRENT="25.12.5"
+          # 官方最新 stable release tag（releases/latest 自动排除预发布）
+          LATEST="$(gh api repos/openwrt/openwrt/releases/latest --jq '.tag_name' | sed 's/^v//')"
+          echo "current=$CURRENT latest=$LATEST"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          NEWEST="$(printf '%s\n%s\n' "$LATEST" "$CURRENT" | sort -V | tail -1)"
+          if [ "$NEWEST" = "$LATEST" ] && [ "$LATEST" != "$CURRENT" ]; then
+            echo "update_available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "update_available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open issue when a newer version is available
+        if: steps.versions.outputs.update_available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT: ${{ steps.versions.outputs.current }}
+          LATEST: ${{ steps.versions.outputs.latest }}
+        run: |
+          # 已有该版本号的 open issue 则跳过，避免重复打扰
+          if [ "$(gh issue list --state open --search "v${LATEST} available in:title" --json number --jq 'length')" -ge 1 ]; then
+            echo "Open issue for v${LATEST} already exists, skipping"
+            exit 0
+          fi
+          BODY=$(cat <<EOF
+官方发布了新版本 **OpenWrt v${LATEST}**（当前仓库默认构建 v${CURRENT}）。
+
+- 发布说明: https://openwrt.org/releases/${LATEST%.*}/notes-${LATEST}
+- 下载目录: https://downloads.openwrt.org/releases/${LATEST}/targets/x86/64/
+
+**升级步骤：**
+1. Actions → *Build OpenWrt x86_64 combined-efi* → Run workflow，Version 填 \`${LATEST}\`
+2. 下载产物确认 \`openwrt-${LATEST}-x86-64-generic-squashfs-combined-efi.img.gz\`
+3. 复核 PACKAGES 各包名在新版本源里仍存在（重点 \`block-mount\` 在 targets feed、\`resize2fs\` 为独立包）
+4. \`files/\` 配置点版本一般无需改动；大版本升级前先 diff 官方默认值
+
+内核与 kmods 自动配套，无需手动处理。
+EOF
+)
+          gh issue create \
+            --title "OpenWrt upstream: v${LATEST} available (current: v${CURRENT})" \
+            --body "$BODY"
+
+      - name: Close stale update issues when up to date
+        if: steps.versions.outputs.update_available == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT: ${{ steps.versions.outputs.current }}
+        run: |
+          for n in $(gh issue list --state open --search "OpenWrt upstream in:title" --json number --jq '.[]'); do
+            echo "Closing stale issue #$n (already up to date at v${CURRENT})"
+            gh issue close "$n" --comment "已更新到最新 v${CURRENT}。"
+          done
