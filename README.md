@@ -76,6 +76,24 @@ PVE 部署参数（对应文档）：`--machine q35 --bios ovmf --efidisk0 ... -
 - **luci 插件**：用官方 SDK / `openwrt/gh-action-sdk` 把插件编成 `.apk` 发布，
   构建时通过自定义源加入 `PACKAGES`，无需源码全量编译。
 
+## luci-app-rootfs-resize（一键扩容插件）
+
+`luci-app-rootfs-resize/` 是一个独立 LuCI 插件：把 `初始化.md` 的 overlay 扩容流程抽象化，
+做成"检测 + 一键扩容"（`parted resizepart → losetup -c → resize2fs`，在线、无需重启）。
+
+- **抽象化**：自动定位 overlay 的 loop 设备 → backing 根分区 → 整个磁盘，
+  兼容 `sda2` / `vda2` / `nvme0n1p2` / `mmcblk0p2` 等设备命名，不写死 /dev/sda。
+- **结构**：`root/usr/libexec/rootfs-resize.sh`（核心逻辑，输出 JSON）+
+  ucode rpcd 后端 + JS view（LuCI 菜单：系统 → Rootfs 扩容）。
+- **编译**：`.github/workflows/build-plugin.yml` 用官方 `ghcr.io/openwrt/sdk:x86_64-25.12.5`
+  容器直接编出 `.apk`（25.12 为 apk 体系），上传 Artifact，**未加入固件镜像**。
+- **设备安装**（未签名包）：
+  ```sh
+  scp out/luci-app-rootfs-resize-*.apk root@<router>:/tmp/
+  ssh root@<router> 'apk add --allow-untrusted /tmp/luci-app-rootfs-resize-*.apk'
+  ```
+- 依赖（设备需已装，均可 `apk add`）：`luci-base parted losetup resize2fs block-mount`。
+
 ## 追官方更新
 
 官方更新对 Image Builder 体系 = **换一个版本号的预编译构建器 + 同版本包源**，内核/kmods 自动配套，无需手动处理。

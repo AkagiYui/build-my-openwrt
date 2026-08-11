@@ -1,0 +1,13 @@
+{
+	"admin/system/rootfsresize": {
+		"title": "Rootfs 扩容",
+		"order": 90,
+		"action": {
+			"type": "view",
+			"path": "rootfsresize/overview"
+		},
+		"depends": {
+			"acl": [ "luci-app-rootfs-resize" ]
+		}
+	}
+}

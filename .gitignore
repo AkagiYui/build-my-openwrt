@@ -1,3 +1,6 @@
 init.md
 # 构建时由 workflow 动态生成的 mihomo 核心，勿提交
 files/etc/openclash/core/
+
+# 插件编译产物（本地下载目录）
+out/

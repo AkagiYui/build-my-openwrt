@@ -1,0 +1,39 @@
+name: Build luci-app-rootfs-resize (.apk)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'luci-app-rootfs-resize/**'
+      - '.github/workflows/build-plugin.yml'
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 官方 OpenWrt 25.12.5 x86_64 SDK 容器（SDK 已预装，CONFIG_USE_APK=y 直接出 .apk）
+      # 纯 shell/ucode/JS 包不依赖 luci feed，无需 feeds update
+      - name: Build .apk in official SDK container
+        run: |
+          mkdir -p out
+          docker run --rm -u buildbot -v "$PWD":/src -w /builder \
+            ghcr.io/openwrt/sdk:x86_64-25.12.5 \
+            /bin/bash -e -c '
+              cp -r /src/luci-app-rootfs-resize package/luci-app-rootfs-resize
+              make defconfig > /dev/null
+              make package/luci-app-rootfs-resize/compile V=s 2>&1 | tail -25
+              cp bin/packages/x86_64/packages/luci-app-rootfs-resize*.apk /src/out/ 2>/dev/null \
+                || { echo "NO APK FOUND"; ls bin/packages/x86_64/packages/ | head; exit 1; }
+            '
+          ls -lh out/
+
+      - name: Upload .apk artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: luci-app-rootfs-resize-apk
+          path: out/*.apk
+          if-no-files-found: error

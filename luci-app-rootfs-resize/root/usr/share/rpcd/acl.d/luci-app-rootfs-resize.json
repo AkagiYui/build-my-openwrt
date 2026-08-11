@@ -1,0 +1,15 @@
+{
+	"luci-app-rootfs-resize": {
+		"description": "Grant access to rootfs/overlay resize",
+		"read": {
+			"ubus": {
+				"rootfsresize": [ "status" ]
+			}
+		},
+		"write": {
+			"ubus": {
+				"rootfsresize": [ "status", "resize" ]
+			}
+		}
+	}
+}
