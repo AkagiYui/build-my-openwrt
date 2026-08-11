@@ -22,7 +22,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # 当前默认版本：从构建 workflow 读取（单一来源，避免两处维护漂移）
-          CURRENT="$(grep -oE "inputs\.version \|\| '[0-9.]+'" .github/workflows/build-openwrt.yml | grep -oE "[0-9.]+" | head -1)"
+          # 注意第二个 grep 必须以数字开头，否则会先匹配到 inputs.version 里的 '.' 字面量
+          CURRENT="$(grep -oE "inputs\.version \|\| '[0-9.]+'" .github/workflows/build-openwrt.yml | grep -oE "[0-9]+[0-9.]*" | head -1)"
           [ -n "$CURRENT" ] || CURRENT="25.12.5"
           # 官方最新 stable release tag（releases/latest 自动排除预发布）
           LATEST="$(gh api repos/openwrt/openwrt/releases/latest --jq '.tag_name' | sed 's/^v//')"
