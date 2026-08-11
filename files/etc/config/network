@@ -1,0 +1,19 @@
+config interface 'loopback'
+	option device 'lo'
+	option proto 'static'
+	option ipaddr '127.0.0.1'
+	option netmask '255.0.0.0'
+
+config device
+	option name 'br-lan'
+	option type 'bridge'
+	list ports 'eth0'
+
+# PVE 场景：net0 接 vmbr0，OpenWrt 作为旁路由/主路由时改这里。
+# 网关/DNS 可在 LuCI 界面配置，或在此追加 option gateway/option dns。
+config interface 'lan'
+	option device 'br-lan'
+	option proto 'static'
+	option ipaddr '192.168.1.1'
+	option netmask '255.255.255.0'
+	option ip6assign '60'

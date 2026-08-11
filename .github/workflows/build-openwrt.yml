@@ -1,0 +1,63 @@
+name: Build OpenWrt x86_64 combined-efi
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'OpenWrt release version (e.g. 25.12.5)'
+        required: false
+        default: '25.12.5'
+  push:
+    branches: [master]
+    paths:
+      - 'files/**'
+      - '.github/workflows/build-openwrt.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version || '25.12.5' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libncurses5-dev zstd file gawk gettext wget unzip python3
+
+      - name: Download & extract official Image Builder
+        run: |
+          IB="openwrt-imagebuilder-${VERSION}-x86-64.Linux-x86_64"
+          curl -fLO "https://downloads.openwrt.org/releases/${VERSION}/targets/x86/64/${IB}.tar.zst"
+          tar --zstd -xf "${IB}.tar.zst"
+          mv "${IB}" imagebuilder
+
+      # 默认 profile=generic 即产出 squashfs-combined-efi.img.gz（官方默认 CONFIG_GRUB_EFI_IMAGES=y）。
+      # PACKAGES：把初始化文档里的运行时 apk add 提前固化进镜像
+      #   - luci-i18n-base-zh-cn  中文界面
+      #   - block-mount          挂载点/overlay 工具
+      #   - openssh-sftp-server  SFTP 服务
+      #   - losetup / resize2fs  扩容 overlay 所需（losetup -c / resize2fs）
+      #   - parted               扩分区（为未来的 luci 一键扩容插件准备）
+      #   - btop                 系统监控
+      # FILES：把初始化文档里的配置改动固化（network / system / profile.d）
+      - name: Build image
+        run: |
+          make image PROFILE=generic \
+            PACKAGES="luci-i18n-base-zh-cn block-mount openssh-sftp-server losetup resize2fs parted btop" \
+            FILES="$GITHUB_WORKSPACE/files"
+        working-directory: imagebuilder
+
+      - name: List generated artifacts
+        run: ls -lh bin/targets/x86/64/
+        working-directory: imagebuilder
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-${{ env.VERSION }}-x86-64-generic
+          path: imagebuilder/bin/targets/x86/64/*
+          if-no-files-found: error
