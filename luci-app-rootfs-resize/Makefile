@@ -21,7 +21,7 @@ define Package/$(PKG_NAME)
 	SECTION:=luci
 	CATEGORY:=LuCI
 	TITLE:=One-click rootfs/overlay resize for x86/arm (PVE workflow)
-	DEPENDS:=+luci-base +parted +losetup +resize2fs +block-mount
+	DEPENDS:=+luci-base +parted +losetup +resize2fs +block-mount +gdisk
 	PKGARCH:=all
 endef
 

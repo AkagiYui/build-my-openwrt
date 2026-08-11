@@ -8,7 +8,10 @@
 import { popen } from 'fs';
 
 function run(action) {
-	let p = popen('/usr/libexec/rootfs-resize.sh', [ action ]);
+	// 注意：fs.popen 的第二个参数是 mode('r'/'w')，不是参数数组！
+	// 之前 popen(cmd, [action]) 把数组当 mode 忽略，脚本收不到参数，
+	// 默认执行了 status 而不是 resize。必须把参数拼进命令字符串。
+	let p = popen('/usr/libexec/rootfs-resize.sh ' + action);
 	let out = '';
 
 	for (let line = p.read('line'); length(line); line = p.read('line'))

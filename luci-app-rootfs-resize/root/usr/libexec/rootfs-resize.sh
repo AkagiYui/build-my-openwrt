@@ -91,10 +91,20 @@ resize() {
 		return 0
 	fi
 
+	# 0. 修复 GPT 头：宿主机(如 PVE qm resize)扩容磁盘后，GPT 头的可用空间字段会过期，
+	#    parted 报 "Not all of the space available ... appears to be used" 并拒绝扩展。
+	#    用 gdisk 专家命令 e（把备份 GPT 重定位到磁盘末尾并重算 LastUsableLBA）修复。
+	#    磁盘正常时该操作幂等无害；gdisk 不存在则跳过，交给 parted 直接尝试。
+	if [ -x /usr/bin/gdisk ] || [ -x /usr/sbin/gdisk ]; then
+		printf "==> 修复 GPT 头到磁盘实际大小 (gdisk e)\n"
+		printf 'x\ne\nw\ny\n' | gdisk "$_disk" >/dev/null 2>&1 || true
+		partprobe "$_disk" >/dev/null 2>&1 || true
+	fi
+
 	printf "==> 扩大分区 %s 到磁盘末尾 (parted -s %s resizepart %s 100%%)\n" \
 		"$_partdev" "$_disk" "$_part"
 	if ! parted -s "$_disk" resizepart "$_part" 100%; then
-		printf "!! parted 失败，请确认分区表状态。\n"
+		printf "!! parted 失败（可能是 GPT 头仍过期，或已用 gdisk 修复仍受限）。请确认分区表状态。\n"
 		return 1
 	fi
 
