@@ -14,6 +14,16 @@ PKG_MAINTAINER:=AkagiYui <dev@example.com>
 
 include $(INCLUDE_DIR)/package.mk
 
+# 纯文件包（无源码）：跳过 configure/compile，仅执行 install 段
+define Build/Prepare
+endef
+
+define Build/Configure
+endef
+
+define Build/Compile
+endef
+
 define Package/$(PKG_NAME)
 	SECTION:=luci
 	CATEGORY:=LuCI
