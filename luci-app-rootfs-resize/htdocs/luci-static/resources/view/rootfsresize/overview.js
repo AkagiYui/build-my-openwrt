@@ -86,10 +86,12 @@ return view.extend({
 			descRow(_('Resizable space'), formatBytes(freeBytes), _('Space expected to be gained after one-click resize'))
 		]);
 
+		// 按钮不禁用（用户要求：空间过小也允许点击，仅提示）。
+		// 仅当后端检测失败(s.ok=false)时禁用，避免无意义请求。
 		var btn = E('button', {
 			'class': 'btn btn-primary',
 			'click': L.bind(this.runResize, this),
-			'disabled': (s.ok && s.can_resize) ? null : 'disabled'
+			'disabled': s.ok ? null : 'disabled'
 		}, _('Resize now'));
 
 		return E('div', { 'class': 'cbi-map' }, [
