@@ -51,7 +51,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CURRENT: ${{ steps.versions.outputs.current }}
         run: |
-          for n in $(gh issue list --state open --search "OpenWrt upstream in:title" --json number --jq '.[]'); do
+          for n in $(gh issue list --state open --search "OpenWrt upstream in:title" --json number --jq '.[].number'); do
             echo "Closing stale issue #$n (already up to date at v${CURRENT})"
             gh issue close "$n" --comment "已更新到最新 v${CURRENT}。"
           done
