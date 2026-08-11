@@ -28,6 +28,7 @@ Image Builder 是官方 buildbot 完成前三层后只把"组装"留给你的产
 | OpenClash 代理插件 | PACKAGES（mihomo 核心已内置，开箱即用） |
 | luci-theme-argon 主题 + argon-config | PACKAGES（自带 uci-defaults 自动设为默认主题） |
 | 文件管理 / Web 终端 | PACKAGES（`luci-app-filemanager` + `luci-app-ttyd` + 中文语言包） |
+| nano 编辑器 | PACKAGES（官方源 9.2，注意 `zip` 创建工具不在官方 feed，需 bsdtar 替代） |
 
 > 官方 x86/64 镜像默认自带 LuCI 全家桶（`luci-ssl` 等），无需重复添加。
 > `files/etc/profile` **不要**整体覆盖——官方 profile 里的 `%PATH%` 是构建时替换的

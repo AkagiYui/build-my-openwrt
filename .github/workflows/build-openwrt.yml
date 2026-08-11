@@ -96,6 +96,7 @@ jobs:
       #   - luci-app-argon-config + 中文语言包
       # 官方 luci feed 补充（对齐测试机功能面）：
       #   - luci-app-filemanager / luci-app-ttyd + 中文语言包
+      # 注：nano 官方源有；zip（创建 zip 的工具）不在官方 feed，需 bsdtar 替代或自编译
       # OpenClash 运行时依赖显式补齐（apk 元数据未含全部运行时依赖）：
       #   dnsmasq-full / luci-compat / bash / curl / ca-bundle / ip-full /
       #   ruby / ruby-yaml / kmod-tun / kmod-inet-diag / kmod-nft-tproxy / unzip
@@ -104,7 +105,7 @@ jobs:
         run: |
           make image PROFILE=generic \
             ROOTFS_PARTSIZE=256 \
-            PACKAGES="luci-i18n-base-zh-cn block-mount openssh-sftp-server losetup resize2fs parted btop \
+            PACKAGES="luci-i18n-base-zh-cn block-mount openssh-sftp-server losetup resize2fs parted btop nano \
               luci-app-openclash luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn \
               luci-app-filemanager luci-i18n-filemanager-zh-cn luci-app-ttyd luci-i18n-ttyd-zh-cn \
               dnsmasq-full luci-compat bash curl ca-bundle ip-full ruby ruby-yaml \
