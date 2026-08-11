@@ -91,9 +91,11 @@ jobs:
       #   - parted               扩分区（为未来的 luci 一键扩容插件准备）
       #   - btop                 系统监控
       # 第三方：
-      #   - luci-app-openclash   代理插件（clash 核心运行时下载，镜像内不含）
+      #   - luci-app-openclash   代理插件（mihomo 核心已内置，见下）
       #   - luci-theme-argon     主题（自带 uci-defaults 自动设为默认主题）
       #   - luci-app-argon-config + 中文语言包
+      # 官方 luci feed 补充（对齐测试机功能面）：
+      #   - luci-app-filemanager / luci-app-ttyd + 中文语言包
       # OpenClash 运行时依赖显式补齐（apk 元数据未含全部运行时依赖）：
       #   dnsmasq-full / luci-compat / bash / curl / ca-bundle / ip-full /
       #   ruby / ruby-yaml / kmod-tun / kmod-inet-diag / kmod-nft-tproxy / unzip
@@ -104,6 +106,7 @@ jobs:
             ROOTFS_PARTSIZE=256 \
             PACKAGES="luci-i18n-base-zh-cn block-mount openssh-sftp-server losetup resize2fs parted btop \
               luci-app-openclash luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn \
+              luci-app-filemanager luci-i18n-filemanager-zh-cn luci-app-ttyd luci-i18n-ttyd-zh-cn \
               dnsmasq-full luci-compat bash curl ca-bundle ip-full ruby ruby-yaml \
               kmod-tun kmod-inet-diag kmod-nft-tproxy unzip" \
             FILES="$GITHUB_WORKSPACE/files"

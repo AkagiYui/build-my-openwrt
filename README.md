@@ -25,8 +25,9 @@ Image Builder 是官方 buildbot 完成前三层后只把"组装"留给你的产
 | uci 设置 Asia/Singapore `<+08>-8` | `files/etc/config/system` |
 | 修改 IP / 网关 / DNS | `files/etc/config/network`（默认 192.168.1.1，改这里） |
 | `parted` 扩分区（文档步骤） | PACKAGES（为未来的 luci 一键扩容插件预装） |
-| OpenClash 代理插件 | PACKAGES（clash 核心运行时下载，镜像内不含） |
+| OpenClash 代理插件 | PACKAGES（mihomo 核心已内置，开箱即用） |
 | luci-theme-argon 主题 + argon-config | PACKAGES（自带 uci-defaults 自动设为默认主题） |
+| 文件管理 / Web 终端 | PACKAGES（`luci-app-filemanager` + `luci-app-ttyd` + 中文语言包） |
 
 > 官方 x86/64 镜像默认自带 LuCI 全家桶（`luci-ssl` 等），无需重复添加。
 > `files/etc/profile` **不要**整体覆盖——官方 profile 里的 `%PATH%` 是构建时替换的
