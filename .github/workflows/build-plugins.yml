@@ -38,6 +38,7 @@ jobs:
           cp -r /tmp/qbittorrent/luci-app-qbittorrent src/luci-app-qbittorrent
           # 静态二进制包装包（本仓库维护，Makefile+init 已在 git；二进制这里现下）
           cp -r "$GITHUB_WORKSPACE/third-party-packages/qbittorrent-nox-static" src/qbittorrent-nox-static
+          mkdir -p src/qbittorrent-nox-static/files/usr/bin
           curl -fSL -o src/qbittorrent-nox-static/files/usr/bin/qbittorrent-nox \
             https://github.com/userdocs/qbittorrent-nox-static/releases/latest/download/x86_64-qbittorrent-nox
           chmod +x src/qbittorrent-nox-static/files/usr/bin/qbittorrent-nox
