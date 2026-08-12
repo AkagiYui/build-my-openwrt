@@ -140,3 +140,44 @@ PVE 部署参数（对应文档）：`--machine q35 --bios ovmf --efidisk0 ... -
 - 内核是预编译的：不能改内核 config / 打内核 patch / 加非官方 kmod（需源码全量编译）。
 - 只能针对官方已发布的版本；版本锁定在所选 release。
 - 自研 `.apk` 不在官方源里，需要自己编好挂自定义源。
+
+---
+
+## 附录：第三方源 dl.openwrt.ai（kwrt）调查备份
+
+> 本次调查结论存档，**仅供参考，当前方案未采用**。以下信息若失效，说明该源已不维护，勿沿用。
+
+`dl.openwrt.ai` 是 **kwrt**（openwrt.ai 个人维护的第三方 OpenWrt）的下载站。
+它对 x86/64 同时提供固件镜像和 Image Builder，最大的卖点是**官方 feed 之外的第三方包已全部预编译**。
+
+### 资源位置
+
+| 资源 | URL | 说明 |
+|---|---|---|
+| 版本目录 | `https://dl.openwrt.ai/releases/25.12/targets/x86/64/` | 固件镜像（`kwrt-*.-squashfs-combined[-efi].img.gz`）、`kwrt-imagebuilder-x86-64.Linux-x86_64.tar.zst`（~361MB）、`feeds.buildinfo` / `config.buildinfo` / `version.buildinfo` / `profiles.json` / `sha256sums`、`files/` 子目录 |
+| 在线包源 | `https://dl.openwrt.ai/releases/25.12/packages/x86_64/<feed>/` | 真正的包仓库（imagebuilder 的 `repositories.conf` 里写着），每个 feed 下有 `Packages` / `Packages.gz` 索引 |
+
+在线包源按 feed 划分（与 `feeds.buildinfo` 对应）：`base`、`packages`、`luci`、`routing`、`video`、`kiddin9`
+（`kiddin9` = `github.com/kiddin9/op-packages`，第三方包的核心来源）。
+
+### 包量级（2026-08 观测）
+
+- 6 个在线源合计 **9824 个独立包**（base 732 / packages 4568 / luci 6708 / routing 56 / video 110 / kiddin9 1000，含多语言包，实际应用约减半）。
+- Image Builder tarball 内另打包 1657 个 `.ipk`（够拼默认固件，**不含** OpenClash/PassWall 等，它们在线提供）。
+- 默认固件 `.manifest` 共 484 包：预装 `luci-app-passwall`(26.7.1)、`sing-box`、`luci-theme-argon`、`luci-app-filemanager`、`luci-app-ttyd`、`parted`、`resize2fs`、`block-mount`、`nano` 等。
+
+### 代理 / 去广告 / 主题等代表性包（在线源均可按名取）
+
+- 代理：`luci-app-openclash`、`luci-app-passwall`、`luci-app-passwall2`、`luci-app-homeproxy`、`luci-app-ssr-plus`、`luci-app-vssr`、`luci-app-v2raya`、`luci-app-xray`，核心：`mihomo` / `mihomo-meta` / `mihomo-alpha`、`sing-box`、`xray-core`、`v2ray-core`、`hysteria`、`tuic`、`trojan`、`naiveproxy`、`gost`、`brook`。
+- DNS/去广告：`luci-app-adguardhome`、`luci-app-smartdns`、`luci-app-mosdns`、`luci-app-chinadns-ng`、`luci-app-adblock`、`luci-app-dnscrypt-proxy2`、`luci-app-https-dns-proxy`。
+- 主题：21 个（`luci-theme-argon` / `alpha` / `design` / `kucat` / `material` / `edge` …）。
+- 存储/下载：`luci-app-alist`、`aria2`、`qbittorrent`、`transmission`、`filebrowser`、`docker` + `docker-compose`。
+- 内网穿透：`frpc`/`frps`、`ddnsto`、`nps`、`tailscale`、`zerotier`。
+
+### 若改用它的影响（取舍）
+
+- ✅ 本仓库 `PACKAGES` 里的项（openclash、mihomo、argon+config、block-mount、resize2fs、parted、filemanager、ttyd、nano、中文包）全部有现成编译产物，**`gh release download` 拉第三方 `.apk` 的机制可整体删除**。
+- ⚠️ **`.ipk` 格式**：kwrt `25.12` 名义是 apk 时代，但仓库是 `.ipk`，与官方 25.12 的 apk 体系**不通用**；要利用这些包必须整体换用 kwrt 的 Image Builder。
+- ⚠️ **供应链信任**：预编译产物来自第三方，等于信任 Kiddin9 一人及其域名；域名若过期被抢注，CI 可能拿到被篡改的包。
+- ⚠️ **非官方内核**：`config.buildinfo` / `version.buildinfo` 与官方不同，出问题无官方背书。
+- ⚠️ **不维护后果**：CI 下载 imagebuilder 一步即失败；已刷写的固件不受影响；在线源 URL 逐个验证 `Packages` 是否 200 即可判断存活。
