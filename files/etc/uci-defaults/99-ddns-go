@@ -1,0 +1,22 @@
+#!/bin/sh
+# ddns-go 固化：创建降权用户、启用服务、修 rpcd 后端权限。
+# 二进制与 LuCI 界面由 workflow 从 sirpdboy/luci-app-ddns-go release
+# 解包进 files/（见 .github/workflows/build-openwrt.yml），首次开机执行本脚本。
+
+# 创建 ddns-go 系统用户（busybox 无 useradd，手动写 passwd/group；UID 9000 避开常见系统用户）
+grep -q '^ddns-go:' /etc/passwd || echo 'ddns-go:x:9000:9000:ddns-go:/etc/ddns-go:/bin/false' >> /etc/passwd
+grep -q '^ddns-go:' /etc/group || echo 'ddns-go:x:9000:' >> /etc/group
+
+mkdir -p /etc/ddns-go
+chown -R ddns-go:ddns-go /etc/ddns-go
+
+# 上游 ipk 默认 enabled=0，固件里开箱即用
+uci set ddns-go.config.enabled=1
+uci commit ddns-go
+
+# rpcd 后端权限（对齐上游 99-luci-ddns-go 的逻辑）
+chmod +x /usr/share/rpcd/ucode/luci.ddns-go
+chown root:www-data /usr/libexec/ddns-go-call
+chmod 750 /usr/libexec/ddns-go-call
+
+exit 0

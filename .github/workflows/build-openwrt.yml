@@ -109,6 +109,35 @@ jobs:
           } > files/etc/openclash/china_ip_route.ipset
           ls -lh files/etc/openclash/
 
+      # ddns-go 动态 DNS：sirpdboy/luci-app-ddns-go（LuCI 界面 + 二进制）。
+      # 官方源没有 ddns-go；sirpdboy release 的 24.10-x86_64 编译包中
+      # ddns-go 是 Go 静态二进制（x86_64），luci 部分是 noarch JS/ucode，
+      # 与 25.12 luci 兼容（已在测试机 192.168.3.1 验证）。
+      # 把 ipk 解包进 files/ 固化；配置/用户/自启用由 files/etc/uci-defaults/99-ddns-go 处理。
+      - name: Embed ddns-go (binary + LuCI app) into image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf /tmp/ddnsgo && mkdir -p /tmp/ddnsgo
+          gh release download --repo sirpdboy/luci-app-ddns-go \
+            --pattern 'openwrt-24.10-x86_64.tar.gz' --dir /tmp/ddnsgo
+          tar -xzf /tmp/ddnsgo/openwrt-24.10-x86_64.tar.gz -C /tmp/ddnsgo
+          mkdir -p /tmp/ddnsgo/root/{usr,etc,www,lib}
+          for ipk in /tmp/ddnsgo/packages_ci/*.ipk; do
+            d="/tmp/ddnsgo/$(basename "$ipk" .ipk)"
+            mkdir -p "$d"
+            tar -xzf "$ipk" -C "$d"
+            tar -xzf "$d/data.tar.gz" -C "$d"
+            for dir in usr etc www lib; do
+              [ -d "$d/$dir" ] && cp -a "$d/$dir"/. /tmp/ddnsgo/root/$dir/
+            done
+          done
+          # 上游 99-luci-ddns-go 的 rpcd 权限逻辑并入我们 git 管理的 99-ddns-go，删掉避免重复
+          rm -f /tmp/ddnsgo/root/etc/uci-defaults/99-luci-ddns-go
+          cp -a /tmp/ddnsgo/root/. files/
+          chmod +x files/usr/bin/ddns-go files/usr/share/rpcd/ucode/luci.ddns-go files/etc/init.d/ddns-go
+          ls -lh files/usr/bin/ddns-go
+
       # 默认 profile=generic 即产出 squashfs-combined-efi.img.gz（官方默认 CONFIG_GRUB_EFI_IMAGES=y）。
       # ROOTFS_PARTSIZE=512：默认 104MB，OpenClash+mihomo+geo 数据库（~25MB）后 squashfs+overlay 吃紧，调大留余量。
       # PACKAGES：把初始化文档里的运行时 apk add 提前固化进镜像
@@ -126,6 +155,7 @@ jobs:
       #   - luci-app-filemanager / luci-app-ttyd + 中文语言包
       # 评估通过的网络/系统增强（官方 feed，含中文语言包）：
       #   - luci-app-upnp        UPnP 端口映射
+      #   - luci-app-wol         Wake-on-LAN 远程开机（etherwake 后端，已在测试机验证）
       #   - luci-app-watchcat    断线/定时自动重启
       #   - luci-app-sqm         智能 QoS（依赖 kmod-sched-cake 自动解析）
       #   - luci-app-nlbwmon     流量统计
@@ -144,6 +174,7 @@ jobs:
               luci-app-openclash luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn \
               luci-app-filemanager luci-i18n-filemanager-zh-cn luci-app-ttyd luci-i18n-ttyd-zh-cn \
               luci-app-upnp luci-i18n-upnp-zh-cn \
+              luci-app-wol etherwake luci-i18n-wol-zh-cn \
               luci-app-watchcat luci-i18n-watchcat-zh-cn \
               luci-app-sqm luci-i18n-sqm-zh-cn \
               luci-app-nlbwmon luci-i18n-nlbwmon-zh-cn \

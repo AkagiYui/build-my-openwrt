@@ -31,6 +31,8 @@ Image Builder 是官方 buildbot 完成前三层后只把"组装"留给你的产
 | luci-theme-argon 主题 + argon-config | PACKAGES（自带 uci-defaults 自动设为默认主题） |
 | 文件管理 / Web 终端 | PACKAGES（`luci-app-filemanager` + `luci-app-ttyd` + 中文语言包） |
 | UPnP / watchcat / SQM / nlbwmon / vnstat2 | PACKAGES（官方 feed + 中文语言包） |
+| Wake-on-LAN 远程开机 | PACKAGES（`luci-app-wol` + `etherwake` 后端 + 中文语言包，已在测试机验证） |
+| ddns-go 动态 DNS | FILES（sirpdboy `luci-app-ddns-go` 的 ipk 构建时解包固化，LuCI 界面 + 二进制，见下） |
 | WireGuard 接口 | PACKAGES（`luci-proto-wireguard` + `wireguard-tools` + `kmod-wireguard`） |
 | nano 编辑器 | PACKAGES（官方源 9.2，注意 `zip` 创建工具不在官方 feed，需 bsdtar 替代） |
 
@@ -60,6 +62,12 @@ OpenClash / Argon 不在官方 feed 里，workflow 构建时用 `gh release down
 - **Argon**：跟随 `jerrykuku/luci-theme-argon` latest release，含主题、配置 app、中文语言包；
   装完自动设为默认主题（自带的 `/etc/uci-defaults/30_luci-theme-argon`）。
   workflow 会自动修复上游 i18n 包的文件名版本号 `.`→`~` 问题（apk 按索引推导文件名）。
+- **ddns-go**：官方源没有 ddns-go。跟随 `sirpdboy/luci-app-ddns-go` latest release 的
+  `openwrt-24.10-x86_64.tar.gz`（内含 ddns-go 二进制 + LuCI 界面 + 中文包三个 ipk），构建时
+  解包 ipk 里的文件进 `files/` 固化——ddns-go 是 Go 静态二进制、luci 部分是 noarch JS/ucode，
+  与 25.12 兼容（已在测试机验证）。首次开机由 `files/etc/uci-defaults/99-ddns-go` 创建
+  `ddns-go` 降权用户（UID 9000，procd 以非 root 运行）、启用服务并修 rpcd 后端权限。
+  LuCI 菜单：**服务 → DDNS-GO**（控制面板 / 基础设置 / 日志）；自带 9876 端口 Web 配置面板。
 - 想锁版本：把 `--pattern` 换成具体文件名，或加 `--tag v0.47.156` 等。
 
 > `ROOTFS_PARTSIZE=512`：官方默认 104MB，OpenClash+mihomo+geo 数据库（~40MB）后 squashfs+overlay 会吃紧，workflow 已调大留余量。
