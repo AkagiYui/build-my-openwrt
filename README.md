@@ -28,6 +28,7 @@ Image Builder 是官方 buildbot 完成前三层后只把"组装"留给你的产
 | OpenClash 代理插件 | PACKAGES（mihomo 核心已内置，开箱即用） |
 | OpenClash geo 数据库 + 大陆白名单 | FILES（GeoIP/GeoSite/ASN/Country + chnroute，构建时拉最新，见下） |
 | OpenClash DNS 预置：dnsmasq 上游保 `.lan` | `files/etc/uci-defaults/90-openclash-dns`（`enable_custom_dns=1` + `127.0.0.1:53`） |
+| OpenClash Web 面板：metacubexd / zashboard | FILES（构建时拉上游 gh-pages 最新版；首次开机把 zashboard 设为默认，见下） |
 | luci-theme-argon 主题 + argon-config | PACKAGES（自带 uci-defaults 自动设为默认主题） |
 | 文件管理 / Web 终端 | PACKAGES（`luci-app-filemanager` + `luci-app-ttyd` + 中文语言包） |
 | UPnP / watchcat / SQM / nlbwmon / vnstat2 | PACKAGES（官方 feed + 中文语言包） |
@@ -59,6 +60,12 @@ OpenClash / Argon 不在官方 feed 里，workflow 构建时用 `gh release down
   OpenClash 的 nameserver 上游，并开启 `enable_custom_dns`——这样：
   - 局域网 `.lan` 域名由 dnsmasq 解析，**开 Clash 也不会失效**（公共 DNS 不认 `.lan`）；
   - 用户之后下载/更新订阅不会覆盖该设置（订阅只动 YAML，不动 uci）。
+- **Web 控制面板（metacubexd / zashboard）**：OpenClash `.apk` 内置的 ui 目录是 release
+  打包时固化的，会滞后于上游；workflow 构建时直接从上游 gh-pages 分支拉取**最新版**，
+  经 FILES 覆盖进 `/usr/share/openclash/ui/`（与插件内"更新面板版本"按钮同源同路径）：
+  metacubexd ← `MetaCubeX/metacubexd` gh-pages，zashboard ← `Zephyruso/zashboard` gh-pages-cdn-fonts。
+  默认面板由 `files/etc/uci-defaults/91-openclash-default-dashboard` 在首次开机设为
+  **zashboard**（仅当仍为出厂默认 metacubexd 时覆盖，用户改过的选择不覆盖）。
 - **Argon**：跟随 `jerrykuku/luci-theme-argon` latest release，含主题、配置 app、中文语言包；
   装完自动设为默认主题（自带的 `/etc/uci-defaults/30_luci-theme-argon`）。
   workflow 会自动修复上游 i18n 包的文件名版本号 `.`→`~` 问题（apk 按索引推导文件名）。

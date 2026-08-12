@@ -138,6 +138,27 @@ jobs:
           chmod +x files/usr/bin/ddns-go files/usr/share/rpcd/ucode/luci.ddns-go files/etc/init.d/ddns-go
           ls -lh files/usr/bin/ddns-go
 
+      # 预置最新版 OpenClash Web 控制面板（metacubexd / zashboard）。
+      # OpenClash .apk 内置的 ui 目录是 release 打包时固化的，滞后于上游；这里构建时直接从
+      # 上游 gh-pages 分支拉取最新（与 OpenClash openclash_download_dashboard.sh 同源同路径）：
+      #   metacubexd ← MetaCubeX/metacubexd 的 gh-pages
+      #   zashboard  ← Zephyruso/zashboard 的 gh-pages-cdn-fonts
+      # 经 FILES 覆盖镜像内 /usr/share/openclash/ui/<name>/（apk 旧 hashed 资产残留，仅占少量空间）；
+      # 默认面板由 files/etc/uci-defaults/91-openclash-default-dashboard 首次开机设为 zashboard。
+      - name: Embed latest dashboards (metacubexd / zashboard)
+        run: |
+          rm -rf files/usr/share/openclash/ui
+          for spec in \
+            "metacubexd|https://codeload.github.com/MetaCubeX/metacubexd/zip/refs/heads/gh-pages|metacubexd-gh-pages" \
+            "zashboard|https://codeload.github.com/Zephyruso/zashboard/zip/refs/heads/gh-pages-cdn-fonts|zashboard-gh-pages-cdn-fonts"; do
+            name="${spec%%|*}"; rest="${spec#*|}"; url="${rest%%|*}"; inner="${rest#*|}"
+            curl -fSL -o "/tmp/${name}.zip" "$url"
+            rm -rf "/tmp/${name}-x" && mkdir -p "/tmp/${name}-x" "files/usr/share/openclash/ui/${name}"
+            unzip -q "/tmp/${name}.zip" -d "/tmp/${name}-x"
+            cp -a "/tmp/${name}-x/${inner}/." "files/usr/share/openclash/ui/${name}/"
+          done
+          ls -lh files/usr/share/openclash/ui/*/index.html
+
       # 默认 profile=generic 即产出 squashfs-combined-efi.img.gz（官方默认 CONFIG_GRUB_EFI_IMAGES=y）。
       # ROOTFS_PARTSIZE=512：默认 104MB，OpenClash+mihomo+geo 数据库（~25MB）后 squashfs+overlay 吃紧，调大留余量。
       # PACKAGES：把初始化文档里的运行时 apk add 提前固化进镜像

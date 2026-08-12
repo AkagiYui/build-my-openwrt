@@ -1,0 +1,15 @@
+#!/bin/sh
+# 把 zashboard 设为 OpenClash 默认 Web 控制面板（构建时已预置最新版 ui，见 workflow）。
+# 幂等：仅当当前值未设置或仍是出厂默认 metacubexd 时覆盖为 zashboard，
+# 尊重用户已在插件里改过的选择（升级后 config 保留，不会反复覆盖）。
+#
+# 出厂配置文件里 `option default_dashboard 'metacubexd'` 就是默认值，无法靠"是否已设置"
+# 区分出厂态和用户选择，所以只处理"出厂默认 metacubexd → zashboard"这一跳变。
+
+cur="$(uci -q get openclash.config.default_dashboard 2>/dev/null)"
+if [ -z "$cur" ] || [ "$cur" = "metacubexd" ]; then
+    uci set openclash.config.default_dashboard='zashboard'
+    uci commit openclash
+fi
+
+exit 0
