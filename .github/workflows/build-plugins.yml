@@ -1,0 +1,77 @@
+name: Build third-party LuCI apps (.apk)
+
+# 编译不在官方 feed 里的第三方 LuCI 应用，产出 .apk 供设备/固件使用。
+# 与 build-plugin.yml（rootfs-resize）同一套机制：官方 SDK 容器，ubuntu-latest 原生 amd64。
+#
+# 产物：
+#   luci-app-diskman           磁盘/分区管理（lisaac，老 lua 架构）
+#   luci-app-zerotier         ZeroTier 网页面板（zhengmz）
+#   luci-app-qbittorrent      qBittorrent 网页面板（sbwml）+ 中文包
+#   qbittorrent-nox-static    静态二进制包装包（PROVIDES:=qbittorrent，满足面板依赖）
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/build-plugins.yml'
+      - 'third-party-packages/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SDK_IMAGE: ghcr.io/openwrt/sdk:x86_64-25.12.5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 拉取上游源码（第三方 app 的 luci 界面）+ qbittorrent 官方静态二进制
+      - name: Fetch sources
+        run: |
+          mkdir -p src out && chmod 777 out   # 容器内 -u buildbot 需要写 out
+          git clone --depth 1 https://github.com/lisaac/luci-app-diskman.git /tmp/diskman
+          git clone --depth 1 https://github.com/zhengmz/luci-app-zerotier.git /tmp/zerotier
+          git clone --depth 1 https://github.com/sbwml/luci-app-qbittorrent.git /tmp/qbittorrent
+          cp -r /tmp/diskman/applications/luci-app-diskman src/luci-app-diskman
+          cp -r /tmp/zerotier src/luci-app-zerotier          # 仓库根即包根
+          cp -r /tmp/qbittorrent/luci-app-qbittorrent src/luci-app-qbittorrent
+          # 静态二进制包装包（本仓库维护，Makefile+init 已在 git；二进制这里现下）
+          cp -r "$GITHUB_WORKSPACE/third-party-packages/qbittorrent-nox-static" src/qbittorrent-nox-static
+          curl -fSL -o src/qbittorrent-nox-static/files/usr/bin/qbittorrent-nox \
+            https://github.com/userdocs/qbittorrent-nox-static/releases/latest/download/x86_64-qbittorrent-nox
+          chmod +x src/qbittorrent-nox-static/files/usr/bin/qbittorrent-nox
+          ls -lh src/qbittorrent-nox-static/files/usr/bin/qbittorrent-nox
+
+      # 官方 SDK 容器编译（与 build-plugin.yml 同款）。
+      # 关键坑（已本地验证定位）：
+      #   1. 必须 feeds update -a：install 时 OpenWrt 检查所有 feed 索引，只 update 部分会静默失败
+      #   2. lucihttp 需要 lua.h，SDK 未预置：先编 lua 包（base feed，平铺路径 package/feeds/base/lua）
+      #   3. 老 lua 架构 app（diskman/zerotier）依赖 luci feed 的 liblucihttp-lua，路径必须带 package/feeds/
+      - name: Build .apk in official SDK container
+        run: |
+          docker run --rm -u buildbot -v "$PWD/src":/src -v "$PWD/out":/out -w /builder \
+            $SDK_IMAGE /bin/bash -e -c '
+            scripts/feeds update -a >/dev/null 2>&1
+            scripts/feeds install -a >/dev/null 2>&1
+            for p in luci-app-diskman luci-app-zerotier luci-app-qbittorrent qbittorrent-nox-static; do
+              rm -rf package/$p && cp -r /src/$p package/$p
+            done
+            make defconfig >/dev/null 2>&1
+            # 提供 lua.h 给 lucihttp（25.x 中 lua 在 base feed）
+            make package/feeds/base/lua/compile V=s 2>&1 | tail -3
+            for p in luci-app-diskman luci-app-zerotier luci-app-qbittorrent qbittorrent-nox-static; do
+              echo "### building $p"
+              make package/$p/compile V=s 2>&1 | tail -6
+            done
+            echo "=== APK 产物 ==="
+            find /builder/bin \( -name "luci-app-*.apk" -o -name "qbittorrent-nox-static-*.apk" \) -exec cp -v {} /out/ \;
+            '
+          ls -lh out/
+
+      - name: Upload .apk artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: third-party-luci-apks
+          path: out/*.apk
+          if-no-files-found: error

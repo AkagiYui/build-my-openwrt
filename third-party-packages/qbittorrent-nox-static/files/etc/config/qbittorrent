@@ -1,0 +1,3 @@
+config qbittorrent 'qbittorrent'
+	option port '8080'
+	option home '/etc/qbittorrent'
