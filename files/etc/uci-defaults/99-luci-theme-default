@@ -1,0 +1,10 @@
+#!/bin/sh
+# 默认主题固化：argon 自带 30_luci-theme-argon 会把 mediaurlbase 设为 argon，
+# 本脚本在它之后执行（按文件名顺序），把默认主题改回官方 bootstrap。
+# 仅改「未手动选过主题的用户」的默认值，不删 argon：
+#   - argon 仍装在固件里，UI 主题下拉框（系统 → 语言和界面）可随时切回；
+#   - 用户手动选过的主题是 luci.main.lang / mediaurlbase 的用户覆盖，不受影响。
+uci set luci.main.mediaurlbase='/luci-static/bootstrap'
+uci commit luci
+
+exit 0
