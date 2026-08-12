@@ -27,7 +27,7 @@ Image Builder 是官方 buildbot 完成前三层后只把"组装"留给你的产
 | `parted` 扩分区（文档步骤） | PACKAGES（为未来的 luci 一键扩容插件预装） |
 | OpenClash 代理插件 | PACKAGES（mihomo 核心已内置，开箱即用） |
 | OpenClash geo 数据库 + 大陆白名单 | FILES（GeoIP/GeoSite/ASN/Country + chnroute，构建时拉最新，见下） |
-| OpenClash DNS 预置：dnsmasq 上游保 `.lan` | `files/etc/uci-defaults/90-openclash-dns`（`enable_custom_dns=1` + `127.0.0.1:53`） |
+| OpenClash DNS 预置：`enable_custom_dns=1`（保持默认 Dnsmasq 劫持模式，`.lan` 天然不失效） | `files/etc/uci-defaults/90-openclash-dns` |
 | OpenClash Web 面板：metacubexd / zashboard | FILES（构建时拉上游 gh-pages 最新版；首次开机把 zashboard 设为默认，见下） |
 | luci-theme-argon 主题 + argon-config | PACKAGES（自带 uci-defaults 自动设为默认主题） |
 | 文件管理 / Web 终端 | PACKAGES（`luci-app-filemanager` + `luci-app-ttyd` + 中文语言包） |
@@ -56,10 +56,12 @@ OpenClash / Argon 不在官方 feed 里，workflow 构建时用 `gh release down
   （GeoIP/GeoSite/ASN/Country，见 `openclash_geo.sh`）与大陆白名单
   （`ispip.clang.cn/all_cn.txt` 转 fw4 格式），写入 `/etc/openclash/`，
   开箱即用，无需首启下载；每次构建自动更新到最新。
-- **DNS 预置**：`90-openclash-dns` 在首次开机把本机 dnsmasq（`127.0.0.1:53`）设为
-  OpenClash 的 nameserver 上游，并开启 `enable_custom_dns`——这样：
-  - 局域网 `.lan` 域名由 dnsmasq 解析，**开 Clash 也不会失效**（公共 DNS 不认 `.lan`）；
-  - 用户之后下载/更新订阅不会覆盖该设置（订阅只动 YAML，不动 uci）。
+- **DNS 预置**：`90-openclash-dns` 在首次开机开启 `enable_custom_dns`（让 uci 的
+  dns_servers 配置能生效），并启用大陆路由白名单（`china_ip_route=2`，配套预置的
+  `china_ip_route.ipset`）。**不预置 nameserver**：保持 OpenClash 默认的
+  「本地 DNS 劫持 = Dnsmasq 转发」模式——dnsmasq 先应答 `.lan`/租约、只把外部域名
+  转发给内核，局域网解析开 Clash 也不会失效；此时再预置 `127.0.0.1:53` 反而会与
+  dnsmasq 的 `server=127.0.0.1#7874` 形成解析环路，故省略。
 - **Web 控制面板（metacubexd / zashboard）**：OpenClash `.apk` 内置的 ui 目录是 release
   打包时固化的，会滞后于上游；workflow 构建时直接从上游 gh-pages 分支拉取**最新版**，
   经 FILES 覆盖进 `/usr/share/openclash/ui/`（与插件内"更新面板版本"按钮同源同路径）：
