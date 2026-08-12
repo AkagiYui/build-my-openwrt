@@ -1,0 +1,25 @@
+#!/bin/sh
+# OpenClash DNS 预置（首次开机执行）：
+#   - 默认启用「自定义 DNS」（enable_custom_dns=1），确保固件内置的 dns_servers 生效
+#     （否则 OpenClash 会退回使用订阅自带 dns 段，内置上游失效）。
+#   - 把本机 dnsmasq(127.0.0.1:53) 设为 nameserver 组上游：
+#     局域网域名（.lan 等）查询由 dnsmasq 解析，保住内网名字不被公网 DNS 打没。
+#   - 启用大陆路由白名单（china_ip_route=2，fw4）：大陆 IP 直连不走代理，
+#     配合构建时预置的 /etc/openclash/china_ip_route.ipset。
+# 幂等：已有 dns_servers 配置则不覆盖（尊重用户/升级后保留）。
+
+uci -q get openclash.@dns_servers[0].ip >/dev/null 2>&1 && exit 0
+
+uci -q batch <<-EOF >/dev/null
+	set openclash.config.enable_custom_dns='1'
+	set openclash.config.china_ip_route='2'
+	add openclash dns_servers
+	set openclash.@dns_servers[-1].type='udp'
+	set openclash.@dns_servers[-1].ip='127.0.0.1'
+	set openclash.@dns_servers[-1].port='53'
+	set openclash.@dns_servers[-1].group='nameserver'
+	set openclash.@dns_servers[-1].enabled='1'
+	commit openclash
+EOF
+
+exit 0

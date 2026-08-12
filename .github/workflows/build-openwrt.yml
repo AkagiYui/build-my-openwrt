@@ -81,8 +81,36 @@ jobs:
           files/etc/openclash/core/clash_meta -v
           echo "mihomo core: $(basename "$gz" .gz)"
 
+      # 预置 geo 数据库 + 大陆白名单，开箱即有最新数据，无需首启下载。
+      # 与 OpenClash openclash_geo.sh / openclash_chnroute.sh 同源同路径：
+      #   GeoIP.dat   ← Loyalsoldier/v2ray-rules-dat geoip.dat
+      #   GeoSite.dat ← Loyalsoldier/v2ray-rules-dat geosite.dat
+      #   ASN.mmdb    ← xishang0128/geoip GeoLite2-ASN.mmdb
+      #   Country.mmdb← alecthw/mmdb_china_ip_list lite 版（含大陆 IP）
+      #   china_ip_route.ipset ← ispip.clang.cn/all_cn.txt 转 fw4 define 格式
+      - name: Embed geo databases and chnroute into image
+        run: |
+          mkdir -p files/etc/openclash
+          curl -fSL -o files/etc/openclash/GeoIP.dat \
+            https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat
+          curl -fSL -o files/etc/openclash/GeoSite.dat \
+            https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
+          curl -fSL -o files/etc/openclash/ASN.mmdb \
+            https://github.com/xishang0128/geoip/releases/latest/download/GeoLite2-ASN.mmdb
+          curl -fSL -o files/etc/openclash/Country.mmdb \
+            https://raw.githubusercontent.com/alecthw/mmdb_china_ip_list/release/lite/Country.mmdb
+          curl -fSL -o /tmp/all_cn.txt https://ispip.clang.cn/all_cn.txt
+          {
+            printf 'define china_ip_route = {\n'
+            awk '!/^$/&&!/^#/{printf "    %s,\n", $0}' /tmp/all_cn.txt
+            printf '}\n'
+            printf 'add set inet fw4 china_ip_route { type ipv4_addr; flags interval; auto-merge; }\n'
+            printf 'add element inet fw4 china_ip_route $china_ip_route\n'
+          } > files/etc/openclash/china_ip_route.ipset
+          ls -lh files/etc/openclash/
+
       # 默认 profile=generic 即产出 squashfs-combined-efi.img.gz（官方默认 CONFIG_GRUB_EFI_IMAGES=y）。
-      # ROOTFS_PARTSIZE=256：默认 104MB，OpenClash+mihomo 后 squashfs+overlay 会吃紧，调大留余量。
+      # ROOTFS_PARTSIZE=512：默认 104MB，OpenClash+mihomo+geo 数据库（~25MB）后 squashfs+overlay 吃紧，调大留余量。
       # PACKAGES：把初始化文档里的运行时 apk add 提前固化进镜像
       #   - luci-i18n-base-zh-cn  中文界面
       #   - block-mount          挂载点/overlay 工具
@@ -104,7 +132,7 @@ jobs:
       - name: Build image
         run: |
           make image PROFILE=generic \
-            ROOTFS_PARTSIZE=256 \
+            ROOTFS_PARTSIZE=512 \
             PACKAGES="luci-i18n-base-zh-cn block-mount openssh-sftp-server losetup resize2fs parted btop nano \
               luci-app-openclash luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn \
               luci-app-filemanager luci-i18n-filemanager-zh-cn luci-app-ttyd luci-i18n-ttyd-zh-cn \

@@ -26,6 +26,8 @@ Image Builder 是官方 buildbot 完成前三层后只把"组装"留给你的产
 | 修改 IP / 网关 / DNS | `files/etc/config/network`（默认 192.168.1.1，改这里） |
 | `parted` 扩分区（文档步骤） | PACKAGES（为未来的 luci 一键扩容插件预装） |
 | OpenClash 代理插件 | PACKAGES（mihomo 核心已内置，开箱即用） |
+| OpenClash geo 数据库 + 大陆白名单 | FILES（GeoIP/GeoSite/ASN/Country + chnroute，构建时拉最新，见下） |
+| OpenClash DNS 预置：dnsmasq 上游保 `.lan` | `files/etc/uci-defaults/90-openclash-dns`（`enable_custom_dns=1` + `127.0.0.1:53`） |
 | luci-theme-argon 主题 + argon-config | PACKAGES（自带 uci-defaults 自动设为默认主题） |
 | 文件管理 / Web 终端 | PACKAGES（`luci-app-filemanager` + `luci-app-ttyd` + 中文语言包） |
 | nano 编辑器 | PACKAGES（官方源 9.2，注意 `zip` 创建工具不在官方 feed，需 bsdtar 替代） |
@@ -45,12 +47,20 @@ OpenClash / Argon 不在官方 feed 里，workflow 构建时用 `gh release down
   `mihomo-linux-amd64-compatible`（对 PVE 虚拟机老指令集 CPU 兼容性最好），
   通过 FILES 机制写入 `/etc/openclash/core/clash_meta`（OpenClash 官方指定的核心路径）并保留可执行权限。
   因此**开箱即用，无需再手动下载核心**；如需切换内核版本，到插件设置页的"版本更新"里操作。
+- **geo 数据库 + 大陆白名单**：构建时自动拉取 OpenClash 同源的 4 个 geo 数据文件
+  （GeoIP/GeoSite/ASN/Country，见 `openclash_geo.sh`）与大陆白名单
+  （`ispip.clang.cn/all_cn.txt` 转 fw4 格式），写入 `/etc/openclash/`，
+  开箱即用，无需首启下载；每次构建自动更新到最新。
+- **DNS 预置**：`90-openclash-dns` 在首次开机把本机 dnsmasq（`127.0.0.1:53`）设为
+  OpenClash 的 nameserver 上游，并开启 `enable_custom_dns`——这样：
+  - 局域网 `.lan` 域名由 dnsmasq 解析，**开 Clash 也不会失效**（公共 DNS 不认 `.lan`）；
+  - 用户之后下载/更新订阅不会覆盖该设置（订阅只动 YAML，不动 uci）。
 - **Argon**：跟随 `jerrykuku/luci-theme-argon` latest release，含主题、配置 app、中文语言包；
   装完自动设为默认主题（自带的 `/etc/uci-defaults/30_luci-theme-argon`）。
   workflow 会自动修复上游 i18n 包的文件名版本号 `.`→`~` 问题（apk 按索引推导文件名）。
 - 想锁版本：把 `--pattern` 换成具体文件名，或加 `--tag v0.47.156` 等。
 
-> `ROOTFS_PARTSIZE=256`：官方默认 104MB，OpenClash+mihomo 后 squashfs+overlay 会吃紧，workflow 已调大留余量。
+> `ROOTFS_PARTSIZE=512`：官方默认 104MB，OpenClash+mihomo+geo 数据库（~40MB）后 squashfs+overlay 会吃紧，workflow 已调大留余量。
 
 ## 产物
 
