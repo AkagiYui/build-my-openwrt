@@ -37,8 +37,10 @@ jobs:
 
       # 第三方包（不在官方 feed 里）: 官方 Image Builder 支持把 .apk 放进 packages/ 目录，
       # 构建时自动 apk mkndx 生成本地索引（见 openwrt README.apk.md）。
-      # OpenClash 与 argon 的官方 release 均提供 noarch 的 .apk 资产，取最新即可。
-      - name: Download third-party packages (OpenClash / Argon)
+      # OpenClash / argon / shadcn 的 release 均提供 noarch 的 .apk 资产，取最新即可。
+      # shadcn（eamonxg/luci-theme-shadcn）：release 的 .apk 即 25.12 的 ADBd v3 格式，
+      # 与作者 feed openwrt.eamonxg.fun 同源；同 release 附带的 .ipk 是 opkg 用的，勿取。
+      - name: Download third-party packages (OpenClash / Argon / Shadcn)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -48,6 +50,9 @@ jobs:
             --pattern 'luci-theme-argon-*.apk' \
             --pattern 'luci-app-argon-config-*.apk' \
             --pattern 'luci-i18n-argon-config-*.apk' \
+            --dir imagebuilder/packages
+          gh release download --repo eamonxg/luci-theme-shadcn \
+            --pattern 'luci-theme-shadcn-*.apk' \
             --dir imagebuilder/packages
           # argon 上游 i18n 的 apk 文件名里版本号用 '.'，而包内索引是 '~'，
           # apk 按索引推导要抓取的文件名，导致 "package mentioned in index not found"。
@@ -172,6 +177,8 @@ jobs:
       #   - luci-app-openclash   代理插件（mihomo 核心已内置，见下）
       #   - luci-theme-argon     主题（自带 uci-defaults 自动设为默认主题）
       #   - luci-app-argon-config + 中文语言包
+      #   - luci-theme-shadcn    shadcn/ui 风格主题（noarch，仅依赖 luci-base；默认主题仍由
+      #                          99-luci-theme-default 保持 bootstrap，argon/shadcn 可随时切换）
       # 官方 luci feed 补充（对齐测试机功能面）：
       #   - luci-app-filemanager / luci-app-ttyd + 中文语言包
       # 评估通过的网络/系统增强（官方 feed，含中文语言包）：
@@ -193,6 +200,7 @@ jobs:
             ROOTFS_PARTSIZE=512 \
             PACKAGES="luci-i18n-base-zh-cn block-mount openssh-sftp-server losetup resize2fs parted btop nano \
               luci-app-openclash luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn \
+              luci-theme-shadcn \
               luci-app-filemanager luci-i18n-filemanager-zh-cn luci-app-ttyd luci-i18n-ttyd-zh-cn \
               luci-app-upnp luci-i18n-upnp-zh-cn \
               luci-app-wol etherwake luci-i18n-wol-zh-cn \

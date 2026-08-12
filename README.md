@@ -29,7 +29,7 @@ Image Builder 是官方 buildbot 完成前三层后只把"组装"留给你的产
 | OpenClash geo 数据库 + 大陆白名单 | FILES（GeoIP/GeoSite/ASN/Country + chnroute，构建时拉最新，见下） |
 | OpenClash DNS 预置：`enable_custom_dns=1`（保持默认 Dnsmasq 劫持模式，`.lan` 天然不失效） | `files/etc/uci-defaults/90-openclash-dns` |
 | OpenClash Web 面板：metacubexd / zashboard | FILES（构建时拉上游 gh-pages 最新版；首次开机把 zashboard 设为默认，见下） |
-| luci-theme-argon 主题 + argon-config | PACKAGES（自带 uci-defaults 自动设为默认主题） |
+| luci-theme-argon + argon-config / luci-theme-shadcn 主题 | PACKAGES（argon 自带 uci-defaults；默认主题由 99-luci-theme-default 保持 bootstrap，两者可随时切换） |
 | 文件管理 / Web 终端 | PACKAGES（`luci-app-filemanager` + `luci-app-ttyd` + 中文语言包） |
 | UPnP / watchcat / SQM / nlbwmon / vnstat2 | PACKAGES（官方 feed + 中文语言包） |
 | Wake-on-LAN 远程开机 | PACKAGES（`luci-app-wol` + `etherwake` 后端 + 中文语言包，已在测试机验证） |
@@ -43,7 +43,7 @@ Image Builder 是官方 buildbot 完成前三层后只把"组装"留给你的产
 
 ## 第三方包机制
 
-OpenClash / Argon 不在官方 feed 里，workflow 构建时用 `gh release download` 拉取
+OpenClash / Argon / Shadcn 不在官方 feed 里，workflow 构建时用 `gh release download` 拉取
 官方 release 的 **noarch `.apk`** 资产，放进 Image Builder 的 `packages/` 目录——
 该目录是官方支持的机制（`README.apk.md`：放入的 `.apk` 会被 `apk mkndx` 生成本地索引并安装）。
 
@@ -71,6 +71,11 @@ OpenClash / Argon 不在官方 feed 里，workflow 构建时用 `gh release down
 - **Argon**：跟随 `jerrykuku/luci-theme-argon` latest release，含主题、配置 app、中文语言包；
   装完自动设为默认主题（自带的 `/etc/uci-defaults/30_luci-theme-argon`）。
   workflow 会自动修复上游 i18n 包的文件名版本号 `.`→`~` 问题（apk 按索引推导文件名）。
+- **Shadcn**：跟随 `eamonxg/luci-theme-shadcn` latest release 的 `.apk`（noarch，仅依赖
+  luci-base；与作者 feed `openwrt.eamonxg.fun` 同源，release 附带的 `.ipk` 是 opkg 用的不取）。
+  shadcn/ui 设计语言移植的现代主题（Tailwind v4 + OKLCH token，⌘K 命令面板、明暗切换）。
+  自带 `/etc/uci-defaults/30_luci-theme-shadcn` 安装时设默认主题，同样被
+  `99-luci-theme-default` 覆盖回 bootstrap，与 argon 一样**内置可选不设默认**（已装机验证）。
 - **ddns-go**：官方源没有 ddns-go。跟随 `sirpdboy/luci-app-ddns-go` latest release 的
   `openwrt-24.10-x86_64.tar.gz`（内含 ddns-go 二进制 + LuCI 界面 + 中文包三个 ipk），构建时
   解包 ipk 里的文件进 `files/` 固化——ddns-go 是 Go 静态二进制、luci 部分是 noarch JS/ucode，
@@ -181,3 +186,27 @@ PVE 部署参数（对应文档）：`--machine q35 --bios ovmf --efidisk0 ... -
 - ⚠️ **供应链信任**：预编译产物来自第三方，等于信任 Kiddin9 一人及其域名；域名若过期被抢注，CI 可能拿到被篡改的包。
 - ⚠️ **非官方内核**：`config.buildinfo` / `version.buildinfo` 与官方不同，出问题无官方背书。
 - ⚠️ **不维护后果**：CI 下载 imagebuilder 一步即失败；已刷写的固件不受影响；在线源 URL 逐个验证 `Packages` 是否 200 即可判断存活。
+
+## 附录：流行第三方源总览（2026-08 调查）
+
+> 判断一个第三方源能否给**官方 Image Builder** 用，先看**包格式**：官方 24.10 及以前 = `opkg`/`.ipk`，官方 25.12 = `apk`/`.apk`。
+> 格式 + 内核都必须与目标官方版本匹配，否则装不上/有依赖冲突。
+
+| 源 | URL | 性质 | 活跃度 | 预编译 x86_64 | 格式 | 备注 |
+|---|---|---|---|---|---|---|
+| **ImmortalWrt** | `downloads.immortalwrt.org` | 完整发行版 + 预编译仓库 + Image Builder | 极活跃（11.4k★） | ✅ | 24.10=ipk / 25.12=apk | 独立构建链，与官方同步发版（25.12.1）；混装注意依赖冲突 |
+| **dl.openwrt.ai (kwrt)** | `dl.openwrt.ai` | 预编译仓库 + Image Builder | 活跃 | ✅ | **24.10=ipk / 25.12=仍是ipk** | 官方主线构建，24.10 兼容性最好；25.12 的 ipk 喂不进官方 apk |
+| **kenzok8/small** | `github.com/kenzok8/small` | 源码 feed + 预编译 Releases | 活跃（1.4k★） | ✅ | ipk(24.10) / apk(25.12) | ssr+/passwall/homeproxy/mihomo 全家桶，整包下载免编译 |
+| **kenzok8/compile-package** | `github.com/kenzok8/compile-package` | 每日预编译 Releases | 每日更新 | ✅ | ipk + apk 双格式 | 每天自动编译最新插件 |
+| **down.dllkids.xyz** | `down.dllkids.xyz/openwrt-feed/` | 规范 opkg/apk 仓库（恩山一键插件源） | 活跃 | ✅ | 24.10=ipk / 25.12=apk | 带签名公钥 + 一键接入脚本，最省事 |
+| **kenzok8/openwrt-packages** | `github.com/kenzok8/openwrt-packages` | 纯源码 feed | 活跃（7.2k★） | ❌ | — | 只适合源码编译，Image Builder 无用 |
+| **coolsnowwolf/lede** | `github.com/coolsnowwolf/lede` | 完整固件源码 | 极活跃（31.6k★） | ❌ | — | 无公开预编译包仓库，纯源码路线 |
+| **Lienol/openwrt-package** | `github.com/Lienol/openwrt-package` | 纯源码 feed | 活跃（315★） | ❌ | — | PassWall 发源地，杂项 luci 应用 |
+| **op.supes.top** | — | — | **已停用** | — | — | 301 重定向并入 dl.openwrt.ai |
+| **vernesong/OpenClash** | `github.com/vernesong/OpenClash` | 单插件 + 预编译 | 极活跃（27k★） | ✅ | ipk + apk | **本仓库正在用**（gh release download 拉 .apk） |
+| **gdy666/lucky** | `github.com/gdy666/lucky` | 单工具 + 二进制 | 活跃（8k★） | ⚠️ 独立二进制 | tar.gz（非 ipk/apk） | IPv6 端口转发/DDNS；需手动部署到 /usr/bin |
+
+**结论（对本仓库）**：当前"从 GitHub release 拉官方 `.apk`"的做法兼容性最稳、每条源独立可控。
+官方 25.12 下现成可用的第三方整源只有 **kenzok8 的 .apk / down.dllkids 的 25.12 仓库**；
+kwrt 的 25.12 还是 ipk 不能用；ImmortalWrt 是独立构建链，混装需谨慎。
+所有个人维护源都有供应链信任风险（域名失效/被抢注），CI 接入前建议锁定版本或镜像自存。
