@@ -124,6 +124,13 @@ jobs:
       #   - luci-app-argon-config + 中文语言包
       # 官方 luci feed 补充（对齐测试机功能面）：
       #   - luci-app-filemanager / luci-app-ttyd + 中文语言包
+      # 评估通过的网络/系统增强（官方 feed，含中文语言包）：
+      #   - luci-app-upnp        UPnP 端口映射
+      #   - luci-app-watchcat    断线/定时自动重启
+      #   - luci-app-sqm         智能 QoS（依赖 kmod-sched-cake 自动解析）
+      #   - luci-app-nlbwmon     流量统计
+      #   - luci-app-vnstat2     长期流量统计
+      #   - luci-proto-wireguard WireGuard 接口（25.12 无独立 app，需 tools+kmod 配套）
       # 注：nano 官方源有；zip（创建 zip 的工具）不在官方 feed，需 bsdtar 替代或自编译
       # OpenClash 运行时依赖显式补齐（apk 元数据未含全部运行时依赖）：
       #   dnsmasq-full / luci-compat / bash / curl / ca-bundle / ip-full /
@@ -136,6 +143,12 @@ jobs:
             PACKAGES="luci-i18n-base-zh-cn block-mount openssh-sftp-server losetup resize2fs parted btop nano \
               luci-app-openclash luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn \
               luci-app-filemanager luci-i18n-filemanager-zh-cn luci-app-ttyd luci-i18n-ttyd-zh-cn \
+              luci-app-upnp luci-i18n-upnp-zh-cn \
+              luci-app-watchcat luci-i18n-watchcat-zh-cn \
+              luci-app-sqm luci-i18n-sqm-zh-cn \
+              luci-app-nlbwmon luci-i18n-nlbwmon-zh-cn \
+              luci-app-vnstat2 luci-i18n-vnstat2-zh-cn \
+              luci-proto-wireguard wireguard-tools kmod-wireguard \
               dnsmasq-full luci-compat bash curl ca-bundle ip-full ruby ruby-yaml \
               kmod-tun kmod-inet-diag kmod-nft-tproxy unzip" \
             FILES="$GITHUB_WORKSPACE/files"

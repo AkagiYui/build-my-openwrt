@@ -30,6 +30,8 @@ Image Builder 是官方 buildbot 完成前三层后只把"组装"留给你的产
 | OpenClash DNS 预置：dnsmasq 上游保 `.lan` | `files/etc/uci-defaults/90-openclash-dns`（`enable_custom_dns=1` + `127.0.0.1:53`） |
 | luci-theme-argon 主题 + argon-config | PACKAGES（自带 uci-defaults 自动设为默认主题） |
 | 文件管理 / Web 终端 | PACKAGES（`luci-app-filemanager` + `luci-app-ttyd` + 中文语言包） |
+| UPnP / watchcat / SQM / nlbwmon / vnstat2 | PACKAGES（官方 feed + 中文语言包） |
+| WireGuard 接口 | PACKAGES（`luci-proto-wireguard` + `wireguard-tools` + `kmod-wireguard`） |
 | nano 编辑器 | PACKAGES（官方源 9.2，注意 `zip` 创建工具不在官方 feed，需 bsdtar 替代） |
 
 > 官方 x86/64 镜像默认自带 LuCI 全家桶（`luci-ssl` 等），无需重复添加。
