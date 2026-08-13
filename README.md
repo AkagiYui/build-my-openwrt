@@ -116,6 +116,7 @@ OpenClash / Argon / Shadcn 不在官方 feed 里，workflow 构建时用 `gh rel
 ## PVE 部署
 
 镜像（`squashfs-combined-efi`）**必须**用 UEFI 引导：`q35 + OVMF`，legacy BIOS 起不来。
+以下流程在 **PVE 9.2.5 + 目录存储 `local`** 实机验证通过（2026-08，VMID 101）。
 
 ### 1. 获取镜像
 
@@ -130,35 +131,66 @@ gunzip openwrt-25.12.5-x86-64-generic-squashfs-combined-efi.img.gz
 
 ```sh
 # 建 VM：q35 + OVMF（UEFI），virtio 网卡接 vmbr0
-qm create 100 --name openwrt --memory 512 --machine q35 --bios ovmf --net0 virtio,bridge=vmbr0
+# 注意 --scsihw virtio-scsi-single 必须显式指定：默认 lsi 控制器会让
+# OVMF 读不到磁盘 → 启动时 BdsDxe: No bootable device（本次实机踩坑根因）。
+qm create 100 --name openwrt --memory 512 --machine q35 --bios ovmf \
+  --scsihw virtio-scsi-single --net0 virtio,bridge=vmbr0
 
 # 导入镜像到 local 存储（目录存储，生成 vm-100-disk-0）
 qm importdisk 100 openwrt-25.12.5-x86-64-generic-squashfs-combined-efi.img local --format raw
 
 # 挂载磁盘 + EFI 启动盘 + 设启动顺序
-qm set 100 --scsi0 local:vm-100-disk-0
-qm set 100 --efidisk0 local:1,efitype=4m,pre-enrolled-keys=1
+# 目录存储的卷名 = 完整文件名（必须带 .raw 扩展名）：
+#   local:100/vm-100-disk-0.raw  ✓
+#   local:100/vm-100-disk-0      ✗ unable to parse volume filename
+#   local:vm-100-disk-0          ✗ unable to parse directory volume name（缺 VMID 前缀）
+qm set 100 --scsi0 local:100/vm-100-disk-0.raw
+# EFI 盘：不要加 pre-enrolled-keys=1！那会启用 Secure Boot，
+# OpenWrt 的 GRUB 无微软签名 → 启动时 BdsDxe: No bootable device。
+qm set 100 --efidisk0 local:1,efitype=4m
 qm set 100 --boot order=scsi0
 
 qm start 100
 ```
 
-> VMID 换成你实际用的数字后，`scsi0` 里的 `vm-100-disk-0` 要跟着改（如 VMID 9100 则是 `vm-9100-disk-0`）。
+> VMID 换成你实际用的数字后，`local:100/vm-100-disk-0.raw` 里的 `100` 要跟着改。
+> importdisk 后磁盘会登记为 `unused0` 槽位（`qm config <VMID>` 可查），但 `qm set` 命令行不接受
+> `unused0` 缩写，需用完整卷 ID；Web UI 硬件页可直接双击 Unused disk 添加。
 
 ### 3. Web UI 等效操作
 
-1. **创建 VM**：General 页选「无介质」，Machine 选 **q35**，BIOS 选 **OVMF (UEFI)**，不建磁盘；
+1. **创建 VM**：General 页选「无介质」，Machine 选 **q35**，BIOS 选 **OVMF (UEFI)**，
+   磁盘控制器选 **VirtIO SCSI (single)**（别用默认 LSI，否则 no bootable device），不建磁盘；
 2. **导入镜像**：节点 → `local` 存储 → ISO 镜像 → 上传解压后的 `.img`；
-3. **硬件** → 添加 → 磁盘 → 选刚上传的镜像（Bus/Device 默认 VirtIO Block 即可），格式 raw；
-4. **选项** → EFI 磁盘 → 添加（efitype=4m，勾 pre-enrolled-keys）；
+3. **硬件** → 添加 → 磁盘 → 选刚上传的镜像（Bus/Device 选 VirtIO Block 或 SCSI），格式 raw；
+4. **选项** → EFI 磁盘 → 添加（efitype=4m，**不要勾 pre-enrolled-keys**）；
 5. **选项** → 引导顺序 → 只留 scsi0，启动。
 
 ### 4. 启动后
 
+```sh
+ping -c 2 192.168.1.1   # 通 = 系统已启动
+curl -s -o /dev/null -w '%{http_code}\n' http://192.168.1.1/   # 200 = LuCI 正常
+```
+
 - 默认 IP **192.168.1.1**（改动见 `files/etc/config/network`，改完 `service network restart`），LuCI 首次登录设密码；
+- **镜像不带 sshd**（只有 sftp-server），管理入口是 LuCI；
 - 主路由/旁路由切换、改 IP、开关 DHCP：直接 `netctl`（见下节）；
 - **磁盘扩容**：PVE 侧 `qm resize 100 scsi0 10G` 后，用固件内置的
   *luci-app-rootfs-resize* 插件一键扩容，或按 `init.md` 的 parted/resize2fs 流程。
+
+> 若控制台卡在 `BdsDxe: No bootable option or device was found`，按顺序排查（均实机踩坑）：
+> 1. **`scsihw` 控制器**（最常见）：必须是 `virtio-scsi-single`。创建 VM 时没显式指定
+>    会默认 `lsi`，OVMF 读不到磁盘。检查 `qm config <VMID>`，缺 `scsihw` 项或值为 `lsi`
+>    则 `qm set <VMID> --scsihw virtio-scsi-single` 后重启。
+> 2. **Secure Boot 误开**：`efidisk0` 里不能有 `pre-enrolled-keys=1`（OpenWrt 的 GRUB
+>    无微软签名）。正确写法 `qm set <VMID> --efidisk0 local:1,efitype=4m`。
+> 3. **卷名语法**：目录存储必须是 `local:<VMID>/vm-<VMID>-disk-0.raw` 完整格式
+>    （缺 `.raw` → `unable to parse volume filename`；缺 `<VMID>/` 前缀 →
+>    `unable to parse directory volume name`；`qm set` 命令行不接受 `unused0` 缩写，
+>    Web UI 硬件页才可以直接添加 Unused disk）。
+> 挂好后 `qm config <VMID>` 应同时看到 `scsi0` 与 `efidisk0`（无 pre-enrolled-keys），
+> `boot: order=scsi0`，且有 `scsihw: virtio-scsi-single`。
 
 ## 快速切网络模式：`netctl`
 
