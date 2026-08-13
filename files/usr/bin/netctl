@@ -27,7 +27,9 @@ valid_ip() {
 	[ $# -eq 4 ] || return 1
 	for o in "$1" "$2" "$3" "$4"; do
 		[ -n "$o" ] || return 1
-		[ "$((10#$o))" -le 255 ] 2>/dev/null || return 1
+		# busybox ash 不支持 $((10#$o)) 基数语法（bash 专属），这里去前导零后直接比较
+		while [ "${o#0}" != "$o" ] && [ "${#o}" -gt 1 ]; do o="${o#0}"; done
+		[ "$o" -le 255 ] 2>/dev/null || return 1
 	done
 	return 0
 }
