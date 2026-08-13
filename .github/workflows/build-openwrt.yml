@@ -143,6 +143,64 @@ jobs:
           chmod +x files/usr/bin/ddns-go files/usr/share/rpcd/ucode/luci.ddns-go files/etc/init.d/ddns-go
           ls -lh files/usr/bin/ddns-go
 
+      # UU 加速器插件（网易官方闭源，v14.2.2+，含 WOL 远程唤醒协议）。
+      # 官方只提供脚本安装（install.sh），无 apk/ipk；这里走“预烘焙”路线：
+      #   - 从官方 API 实时拿最新版本 + md5，下载 uu.tar.gz（x86_64 ≈3MB）
+      #   - uuplugin → files/usr/bin/uugamebooster（二进制内含 uu_router_messages.Wol/WolReply
+      #     协议与 ff:ff:ff:ff:ff:ff 魔术包广播，支持 App 下发远程唤醒指令）
+      #   - xtables-nft-multi → files/usr/bin/（iptables-nft 兼容层，fw4/nftables 环境用）
+      #   - LuCI 界面取自 fengqi/luci-app-uugamebooster（Tianling Shen，ImmortalWrt 官方成员，
+      #     master 分支适配 OpenWrt 25.12+ 的纯 JS 前端）
+      #   - 中文翻译用 po2lmo 编译成 .lmo（luci 运行时只读 lmo）；po2lmo 由 luci-base 源码
+      #     现场编译（lemon 生成 parser，纯 C 无额外依赖）
+      # 首次使用：LuCI 服务→UU游戏加速器 开启，手机 App「UU主机加速」扫码绑定（sn=br-lan MAC）。
+      # 与 OpenClash 共存：默认 Dnsmasq-hijack 模式已验证可共存；勿同时开 TUN 模式。
+      - name: Embed UU GameBooster (binary + LuCI app) into image
+        run: |
+          set -euo pipefail
+          # 1) 官方 API 获取最新版本下载地址 + md5（url 是 http://，换 https 更稳）
+          PLUGIN_JSON="$(curl -fsSL 'https://router.uu.163.com/api/plugin?type=openwrt-x86_64')"
+          PLUGIN_URL="$(printf '%s' "$PLUGIN_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin)["url"])' | sed 's|^http://|https://|')"
+          PLUGIN_MD5="$(printf '%s' "$PLUGIN_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin)["md5"])')"
+          echo "UU plugin: $PLUGIN_URL"
+          # 2) 下载 + md5 校验 + 解压
+          curl -fSL -o /tmp/uu.tar.gz "$PLUGIN_URL"
+          echo "$PLUGIN_MD5  /tmp/uu.tar.gz" | md5sum -c -
+          rm -rf /tmp/uu && mkdir -p /tmp/uu
+          tar -xzf /tmp/uu.tar.gz -C /tmp/uu
+          # 3) 二进制烘焙进 files/（file_copy 用 cp -fpR，install 保留可执行权限）
+          mkdir -p files/usr/bin files/usr/share/uugamebooster
+          install -m 0755 /tmp/uu/uuplugin files/usr/bin/uugamebooster
+          install -m 0755 /tmp/uu/xtables-nft-multi files/usr/bin/xtables-nft-multi
+          install -m 0644 /tmp/uu/uu.conf files/usr/share/uugamebooster/uu.conf
+          # 4) LuCI 前端（fengqi master = 25.12+）+ 二维码
+          rm -rf /tmp/uu-luci && git clone -q --depth 1 https://github.com/fengqi/luci-app-uugamebooster /tmp/uu-luci
+          mkdir -p files/usr/share/luci/menu.d files/usr/share/rpcd/acl.d \
+                   files/usr/lib/luci/static/resources/view files/www/uugamebooster
+          cp /tmp/uu-luci/luci-app-uugamebooster/root/usr/share/luci/menu.d/luci-app-uugamebooster.json \
+             files/usr/share/luci/menu.d/
+          cp /tmp/uu-luci/luci-app-uugamebooster/root/usr/share/rpcd/acl.d/luci-app-uugamebooster.json \
+             files/usr/share/rpcd/acl.d/
+          cp /tmp/uu-luci/luci-app-uugamebooster/htdocs/luci-static/resources/view/uugamebooster.js \
+             files/usr/lib/luci/static/resources/view/
+          cp /tmp/uu-luci/luci-app-uugamebooster/root/www/uugamebooster/*.png files/www/uugamebooster/
+          # 5) 中文翻译：po → lmo（po2lmo 从 luci-base 源码现场编译）
+          rm -rf /tmp/po2lmo-src && mkdir -p /tmp/po2lmo-src/contrib /tmp/po2lmo-src/src/lib
+          curl -fsSL https://raw.githubusercontent.com/openwrt/luci/openwrt-25.12/modules/luci-base/src/contrib/lemon.c -o /tmp/po2lmo-src/contrib/lemon.c
+          curl -fsSL https://raw.githubusercontent.com/openwrt/luci/openwrt-25.12/modules/luci-base/src/contrib/lempar.c -o /tmp/po2lmo-src/contrib/lempar.c
+          for f in plural_formula.y lmo.c lmo.h; do
+            curl -fsSL "https://raw.githubusercontent.com/openwrt/luci/openwrt-25.12/modules/luci-base/src/lib/$f" -o "/tmp/po2lmo-src/src/lib/$f"
+          done
+          curl -fsSL https://raw.githubusercontent.com/openwrt/luci/openwrt-25.12/modules/luci-base/src/po2lmo.c -o /tmp/po2lmo-src/src/po2lmo.c
+          (cd /tmp/po2lmo-src \
+            && cc -std=gnu17 -o contrib/lemon contrib/lemon.c \
+            && (cd src && ../contrib/lemon -q lib/plural_formula.y) \
+            && cc -o po2lmo src/po2lmo.c src/lib/lmo.c src/lib/plural_formula.c)
+          mkdir -p files/usr/lib/luci/i18n
+          /tmp/po2lmo-src/po2lmo /tmp/uu-luci/luci-app-uugamebooster/po/zh_Hans/uugamebooster.po \
+            files/usr/lib/luci/i18n/uugamebooster.zh-cn.lmo
+          ls -lh files/usr/bin/uugamebooster files/usr/lib/luci/i18n/uugamebooster.zh-cn.lmo
+
       # 预置最新版 OpenClash Web 控制面板（metacubexd / zashboard）。
       # OpenClash .apk 内置的 ui 目录是 release 打包时固化的，滞后于上游；这里构建时直接从
       # 上游 gh-pages 分支拉取最新（与 OpenClash openclash_download_dashboard.sh 同源同路径）：

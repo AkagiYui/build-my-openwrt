@@ -1,0 +1,145 @@
+#!/bin/sh
+# netctl - 快速切换 LAN 网络模式（IP / DHCP 开关）
+# 场景：PVE 里 OpenWrt 作主路由/旁路由时，免进 LuCI，一条命令切模式。
+#
+# 用法:
+#   netctl status           查看当前 LAN 配置
+#   netctl ip <IP>          改 LAN IP（如 netctl ip 192.168.1.2，保留网关/DNS 设置）
+#   netctl dhcp on|off      开关 LAN DHCP（不带参数则显示当前状态）
+#   netctl main [IP]        主路由模式：IP(默认 192.168.1.1)、清网关/DNS、开 DHCP
+#   netctl side [IP] [GW]   旁路由模式：IP(默认 GW 末位+1)、网关/DNS 指向 GW、关 DHCP
+#
+# 注意：改 IP 立即生效，当前 SSH/Web 连接会断开；请预留 PVE 控制台/串口备用入口。
+
+set -u
+
+valid_ip() {
+	# 校验 IPv4：4 段 0-255 的数字（纯 sh，兼容 busybox）
+	case "$1" in
+		''|*[!0-9.]*) return 1 ;;
+		*.*.*.*) ;;
+		*) return 1 ;;
+	esac
+	local old_ifs="$IFS"
+	IFS='.'
+	set -- $1
+	IFS="$old_ifs"
+	[ $# -eq 4 ] || return 1
+	for o in "$1" "$2" "$3" "$4"; do
+		[ -n "$o" ] || return 1
+		[ "$((10#$o))" -le 255 ] 2>/dev/null || return 1
+	done
+	return 0
+}
+
+dhcp_on() {
+	uci -q delete dhcp.lan.ignore
+	uci set dhcp.lan.dhcpv4='server'
+	uci commit dhcp
+}
+
+dhcp_off() {
+	uci set dhcp.lan.ignore='1'
+	uci -q delete dhcp.lan.dhcpv4
+	uci commit dhcp
+}
+
+dhcp_state() {
+	if [ "$(uci get dhcp.lan.ignore 2>/dev/null || echo 0)" = "1" ]; then
+		echo off
+	else
+		echo on
+	fi
+}
+
+restart_net() {
+	service network restart
+	service dnsmasq restart 2>/dev/null || /etc/init.d/dnsmasq restart 2>/dev/null
+	echo "已生效。若改的是 IP，当前连接已断开，请用新 IP 重连。"
+}
+
+status() {
+	echo "LAN IP     : $(uci get network.lan.ipaddr 2>/dev/null || echo '(none)')"
+	echo "Netmask    : $(uci get network.lan.netmask 2>/dev/null || echo '(none)')"
+	echo "Gateway    : $(uci get network.lan.gateway 2>/dev/null || echo '(none)')"
+	echo "DNS        : $(uci get network.lan.dns 2>/dev/null || echo '(none)')"
+	echo "DHCP       : $(dhcp_state)"
+}
+
+ip_cmd() {
+	[ $# -ge 1 ] || { usage >&2; exit 1; }
+	valid_ip "$1" || { echo "IP 格式错误: $1" >&2; exit 1; }
+	uci set network.lan.ipaddr="$1"
+	uci commit network
+	echo "LAN IP -> $1"
+	restart_net
+}
+
+main_mode() {
+	local ip="${1:-192.168.1.1}"
+	valid_ip "$ip" || { echo "IP 格式错误: $ip" >&2; exit 1; }
+	uci set network.lan.ipaddr="$ip"
+	uci set network.lan.netmask='255.255.255.0'
+	uci -q delete network.lan.gateway
+	uci -q delete network.lan.dns
+	uci commit network
+	dhcp_on
+	echo "主路由模式: IP=$ip netmask=255.255.255.0 网关/DNS=清除 DHCP=on"
+	restart_net
+}
+
+side_mode() {
+	local ip="${1:-}" gw="${2:-}"
+	if [ -n "$ip" ]; then
+		valid_ip "$ip" || { echo "IP 格式错误: $ip" >&2; exit 1; }
+		# 只给 IP 时，网关自动推导为同网段 .1（如 10.0.0.2 -> 10.0.0.1）
+		[ -n "$gw" ] || gw="$(echo "$ip" | awk -F. '{print $1"."$2"."$3".1"}')"
+	else
+		gw="${gw:-192.168.1.1}"
+		# 不传时默认 IP = 网关末位 +1
+		ip="$(echo "$gw" | awk -F. '{print $1"."$2"."$3"."$4+1}')"
+	fi
+	valid_ip "$gw" || { echo "网关 IP 格式错误: $gw" >&2; exit 1; }
+	if [ "$gw" = "$ip" ]; then
+		echo "警告: 网关与 IP 相同（${gw}），无法上网，请检查" >&2
+	elif [ "${gw%.*}" != "${ip%.*}" ]; then
+		echo "警告: 网关与 IP 不同网段（${gw%.*} vs ${ip%.*}），确认路由可达" >&2
+	fi
+	uci set network.lan.ipaddr="$ip"
+	uci set network.lan.gateway="$gw"
+	uci set network.lan.dns="$gw"
+	uci commit network
+	dhcp_off
+	echo "旁路由模式: IP=$ip 网关/DNS=$gw DHCP=off"
+	echo "提示: 确认 $gw 是主路由且 $ip 未被占用；客户端网关/DNS 指到 $ip 即可。"
+	restart_net
+}
+
+usage() {
+	cat <<-'EOF'
+	用法: netctl <命令> [参数]
+	  status              查看当前 LAN 配置
+	  ip <IP>             修改 LAN IP（保留网关/DNS）
+	  dhcp on|off         开关 LAN DHCP（不带参数显示状态）
+	  main [IP]           主路由模式：IP(默认192.168.1.1)、清网关/DNS、开 DHCP
+	  side [IP] [GW]      旁路由模式：不传=192.168.1.2/.1；只传 IP=网关取同网段 .1；传两个=全指定
+	EOF
+}
+
+cmd="${1:-}"
+shift 2>/dev/null || true
+case "$cmd" in
+	status) status ;;
+	ip) ip_cmd "$@" ;;
+	dhcp)
+		case "${1:-}" in
+			on)  dhcp_on;  echo "DHCP: on";  service dnsmasq restart 2>/dev/null || true ;;
+			off) dhcp_off; echo "DHCP: off"; service dnsmasq restart 2>/dev/null || true ;;
+			"")  echo "DHCP: $(dhcp_state)" ;;
+			*)   usage >&2; exit 1 ;;
+		esac
+		;;
+	main) main_mode "$@" ;;
+	side) side_mode "$@" ;;
+	*) usage >&2; exit 1 ;;
+esac

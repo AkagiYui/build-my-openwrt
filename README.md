@@ -34,6 +34,7 @@ Image Builder 是官方 buildbot 完成前三层后只把"组装"留给你的产
 | UPnP / watchcat / SQM / nlbwmon / vnstat2 | PACKAGES（官方 feed + 中文语言包） |
 | Wake-on-LAN 远程开机 | PACKAGES（`luci-app-wol` + `etherwake` 后端 + 中文语言包，已在测试机验证） |
 | ddns-go 动态 DNS | FILES（sirpdboy `luci-app-ddns-go` 的 ipk 构建时解包固化，LuCI 界面 + 二进制，见下） |
+| UU 游戏加速器（网易，含 WOL 远程唤醒协议） | FILES（官方闭源二进制构建时烘焙，LuCI 界面来自 fengqi/luci-app-uugamebooster，见下） |
 | WireGuard 接口 | PACKAGES（`luci-proto-wireguard` + `wireguard-tools` + `kmod-wireguard`） |
 | nano 编辑器 | PACKAGES（官方源 9.2，注意 `zip` 创建工具不在官方 feed，需 bsdtar 替代） |
 
@@ -82,6 +83,24 @@ OpenClash / Argon / Shadcn 不在官方 feed 里，workflow 构建时用 `gh rel
   与 25.12 兼容（已在测试机验证）。首次开机由 `files/etc/uci-defaults/99-ddns-go` 创建
   `ddns-go` 降权用户（UID 9000，procd 以非 root 运行）、启用服务并修 rpcd 后端权限。
   LuCI 菜单：**服务 → DDNS-GO**（控制面板 / 基础设置 / 日志）；自带 9876 端口 Web 配置面板。
+- **UU 游戏加速器**：官方只提供脚本安装（闭源，无 apk/ipk），workflow 走「预烘焙」路线——
+  构建时调官方 API `router.uu.163.com/api/plugin?type=openwrt-x86_64` 拿**最新版本 + md5**
+  （当前 v14.2.2），校验后把 `uu.tar.gz` 解包固化进 `files/`：
+  - 主程序 `uuplugin` → `/usr/bin/uugamebooster`，`xtables-nft-multi`（iptables-nft 兼容层，
+    fw4/nftables 环境必需）→ `/usr/bin/`，`uu.conf` → `/usr/share/uugamebooster/`
+  - LuCI 界面来自 `fengqi/luci-app-uugamebooster`（Tianling Shen，ImmortalWrt 官方成员；
+    master 分支适配 **25.12+** 的纯 JS 前端）：菜单 **服务 → UU游戏加速器**，含状态轮询 + App 二维码；
+    中文翻译在构建时用 po2lmo 编译成 `.lmo`（po2lmo 从 luci-base 源码现场编译，纯 C 无额外依赖）
+  - 开关由 `files/etc/config/uugamebooster` 控制（默认关），启用：LuCI 页面勾选或
+    `uci set uugamebooster.config.enabled=1 && service uugamebooster start`；
+    手机 App「UU主机加速」扫码绑定后可用（绑定标识 = br-lan MAC）
+  - **WOL 远程唤醒**：插件二进制自带 `uu_router_messages.Wol/WolReply` 协议与
+    `ff:ff:ff:ff:ff:ff` 魔术包广播，App 侧经网易云下发唤醒指令、路由器在局域网发魔术包
+    （网易「UU远程」的远程开机亦复用此链路，OpenWrt 未在官方辅助设备列表，需实测）
+  - **与 OpenClash 共存**：UU 建 `tun163` 并接管被加速设备流量。固件默认
+    OpenClash 为 **Dnsmasq-hijack 模式**（非 TUN），社区实测可共存；**不要**在
+    OpenClash 里开 TUN/fake-ip 模式，并把游戏机加入 OpenClash 直连名单
+  - 运行时按需从网易拉更新，开机自启由 init 脚本拉起，无需手动安装
 - 想锁版本：把 `--pattern` 换成具体文件名，或加 `--tag v0.47.156` 等。
 
 > `ROOTFS_PARTSIZE=512`：官方默认 104MB，OpenClash+mihomo+geo 数据库（~40MB）后 squashfs+overlay 会吃紧，workflow 已调大留余量。
@@ -94,7 +113,66 @@ OpenClash / Argon / Shadcn 不在官方 feed 里，workflow 构建时用 `gh rel
 - `...-squashfs-combined.img.gz`（legacy BIOS）
 - `...-ext4-combined-efi.img.gz`、rootfs 等
 
-PVE 部署参数（对应文档）：`--machine q35 --bios ovmf --efidisk0 ... --boot order=scsi0`。
+## PVE 部署
+
+镜像（`squashfs-combined-efi`）**必须**用 UEFI 引导：`q35 + OVMF`，legacy BIOS 起不来。
+
+### 1. 获取镜像
+
+Actions → *Build OpenWrt x86_64 combined-efi* → 下载 Artifacts，
+把 `openwrt-25.12.5-x86-64-generic-squashfs-combined-efi.img.gz` 上传到 PVE 宿主机（如 `/var/lib/vz/template/iso/`）：
+
+```sh
+gunzip openwrt-25.12.5-x86-64-generic-squashfs-combined-efi.img.gz
+```
+
+### 2. 命令行部署（以 VMID 100 为例）
+
+```sh
+# 建 VM：q35 + OVMF（UEFI），virtio 网卡接 vmbr0
+qm create 100 --name openwrt --memory 512 --machine q35 --bios ovmf --net0 virtio,bridge=vmbr0
+
+# 导入镜像到 local 存储（目录存储，生成 vm-100-disk-0）
+qm importdisk 100 openwrt-25.12.5-x86-64-generic-squashfs-combined-efi.img local --format raw
+
+# 挂载磁盘 + EFI 启动盘 + 设启动顺序
+qm set 100 --scsi0 local:vm-100-disk-0
+qm set 100 --efidisk0 local:1,efitype=4m,pre-enrolled-keys=1
+qm set 100 --boot order=scsi0
+
+qm start 100
+```
+
+> VMID 换成你实际用的数字后，`scsi0` 里的 `vm-100-disk-0` 要跟着改（如 VMID 9100 则是 `vm-9100-disk-0`）。
+
+### 3. Web UI 等效操作
+
+1. **创建 VM**：General 页选「无介质」，Machine 选 **q35**，BIOS 选 **OVMF (UEFI)**，不建磁盘；
+2. **导入镜像**：节点 → `local` 存储 → ISO 镜像 → 上传解压后的 `.img`；
+3. **硬件** → 添加 → 磁盘 → 选刚上传的镜像（Bus/Device 默认 VirtIO Block 即可），格式 raw；
+4. **选项** → EFI 磁盘 → 添加（efitype=4m，勾 pre-enrolled-keys）；
+5. **选项** → 引导顺序 → 只留 scsi0，启动。
+
+### 4. 启动后
+
+- 默认 IP **192.168.1.1**（改动见 `files/etc/config/network`，改完 `service network restart`），LuCI 首次登录设密码；
+- 主路由/旁路由切换、改 IP、开关 DHCP：直接 `netctl`（见下节）；
+- **磁盘扩容**：PVE 侧 `qm resize 100 scsi0 10G` 后，用固件内置的
+  *luci-app-rootfs-resize* 插件一键扩容，或按 `init.md` 的 parted/resize2fs 流程。
+
+## 快速切网络模式：`netctl`
+
+固件内置 `netctl` 命令，PVE 里作主路由/旁路由切换免进 LuCI：
+
+```sh
+netctl status             # 查看当前 LAN 配置
+netctl ip 192.168.1.2     # 改 LAN IP（保留网关/DNS）
+netctl dhcp off           # 关 DHCP（on 开启）
+netctl main [IP]          # 主路由模式：IP(默认192.168.1.1)、清网关/DNS、开 DHCP
+netctl side [IP] [GW]     # 旁路由模式：不传=192.168.1.2/.1；只传IP=网关取同网段.1；两个都传=全指定
+```
+
+改 IP 立即生效，SSH/Web 连接会断开，从新 IP 重连即可。
 
 ## 触发构建
 
