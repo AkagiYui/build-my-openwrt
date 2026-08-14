@@ -57,7 +57,7 @@ dhcp_state() {
 restart_net() {
 	service network restart
 	service dnsmasq restart 2>/dev/null || /etc/init.d/dnsmasq restart 2>/dev/null
-	echo "已生效。若改的是 IP，当前连接已断开，请用新 IP 重连。"
+	echo "Applied. If the IP changed, the current connection is dropped - reconnect with the new IP."
 }
 
 status() {
@@ -70,7 +70,7 @@ status() {
 
 ip_cmd() {
 	[ $# -ge 1 ] || { usage >&2; exit 1; }
-	valid_ip "$1" || { echo "IP 格式错误: $1" >&2; exit 1; }
+	valid_ip "$1" || { echo "Invalid IP: $1" >&2; exit 1; }
 	uci set network.lan.ipaddr="$1"
 	uci commit network
 	echo "LAN IP -> $1"
@@ -79,21 +79,21 @@ ip_cmd() {
 
 main_mode() {
 	local ip="${1:-192.168.1.1}"
-	valid_ip "$ip" || { echo "IP 格式错误: $ip" >&2; exit 1; }
+	valid_ip "$ip" || { echo "Invalid IP: $ip" >&2; exit 1; }
 	uci set network.lan.ipaddr="$ip"
 	uci set network.lan.netmask='255.255.255.0'
 	uci -q delete network.lan.gateway
 	uci -q delete network.lan.dns
 	uci commit network
 	dhcp_on
-	echo "主路由模式: IP=$ip netmask=255.255.255.0 网关/DNS=清除 DHCP=on"
+	echo "Main router mode: IP=$ip netmask=255.255.255.0 gateway/DNS=cleared DHCP=on"
 	restart_net
 }
 
 side_mode() {
 	local ip="${1:-}" gw="${2:-}"
 	if [ -n "$ip" ]; then
-		valid_ip "$ip" || { echo "IP 格式错误: $ip" >&2; exit 1; }
+		valid_ip "$ip" || { echo "Invalid IP: $ip" >&2; exit 1; }
 		# 只给 IP 时，网关自动推导为同网段 .1（如 10.0.0.2 -> 10.0.0.1）
 		[ -n "$gw" ] || gw="$(echo "$ip" | awk -F. '{print $1"."$2"."$3".1"}')"
 	else
@@ -101,30 +101,30 @@ side_mode() {
 		# 不传时默认 IP = 网关末位 +1
 		ip="$(echo "$gw" | awk -F. '{print $1"."$2"."$3"."$4+1}')"
 	fi
-	valid_ip "$gw" || { echo "网关 IP 格式错误: $gw" >&2; exit 1; }
+	valid_ip "$gw" || { echo "Invalid gateway IP: $gw" >&2; exit 1; }
 	if [ "$gw" = "$ip" ]; then
-		echo "警告: 网关与 IP 相同（${gw}），无法上网，请检查" >&2
+		echo "WARNING: gateway equals IP (${gw}); no internet access, please check" >&2
 	elif [ "${gw%.*}" != "${ip%.*}" ]; then
-		echo "警告: 网关与 IP 不同网段（${gw%.*} vs ${ip%.*}），确认路由可达" >&2
+		echo "WARNING: gateway and IP are on different subnets (${gw%.*} vs ${ip%.*}); verify reachability" >&2
 	fi
 	uci set network.lan.ipaddr="$ip"
 	uci set network.lan.gateway="$gw"
 	uci set network.lan.dns="$gw"
 	uci commit network
 	dhcp_off
-	echo "旁路由模式: IP=$ip 网关/DNS=$gw DHCP=off"
-	echo "提示: 确认 $gw 是主路由且 $ip 未被占用；客户端网关/DNS 指到 $ip 即可。"
+	echo "Side router mode: IP=$ip gateway/DNS=$gw DHCP=off"
+	echo "Note: ensure $gw is the main router and $ip is unused; point clients' gateway/DNS to $ip."
 	restart_net
 }
 
 usage() {
 	cat <<-'EOF'
-	用法: netctl <命令> [参数]
-	  status              查看当前 LAN 配置
-	  ip <IP>             修改 LAN IP（保留网关/DNS）
-	  dhcp on|off         开关 LAN DHCP（不带参数显示状态）
-	  main [IP]           主路由模式：IP(默认192.168.1.1)、清网关/DNS、开 DHCP
-	  side [IP] [GW]      旁路由模式：不传=192.168.1.2/.1；只传 IP=网关取同网段 .1；传两个=全指定
+	Usage: netctl <command> [args]
+	  status              show current LAN config
+	  ip <IP>             change LAN IP (keep gateway/DNS)
+	  dhcp on|off         toggle LAN DHCP (no arg = show state)
+	  main [IP]           main router mode: IP (default 192.168.1.1), clear gateway/DNS, DHCP on
+	  side [IP] [GW]      side router mode: none=192.168.1.2/.1; IP only=gateway .1; both=explicit
 	EOF
 }
 
