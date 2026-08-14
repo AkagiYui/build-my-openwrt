@@ -37,21 +37,24 @@ return view.extend({
 			E('div', _('The partition backing /overlay will be extended to the full disk and the filesystem will be resized online. Do not power off during the operation.')),
 			E('div', { 'class': 'right' }, [
 				E('div', { 'class': 'btn', 'click': L.hideModal }, _('Cancel')),
-				' ',
-				E('div', { 'class': 'btn primary', 'click': function() {
-					ui.hideModal();
-					ui.addTimeLimitedNotification(_('Resizing...'), [], 10000, 'info');
-					callResize().then(function(res) {
-						if (res && res.log)
-							ui.addNotification(null, E('pre', res.log));
-						if (res && !res.ok && res.error)
-							ui.addNotification(null, E('div', { 'class': 'alert alert-danger' }, _('Resize failed: ') + res.error));
-						window.location.reload();
-					}).catch(function(e) {
-						ui.addNotification(null, E('div', { 'class': 'alert alert-danger' }, _('Resize failed: ') + (e.message || e)));
-						window.location.reload();
-					});
-				}}, _('Resize now'))
+					' ',
+					E('div', { 'class': 'btn primary', 'click': function() {
+						ui.hideModal();
+						ui.addTimeLimitedNotification(_('Resizing...'), [], 10000, 'info');
+						callResize().then(function(res) {
+							if (res && res.log)
+								ui.addNotification(null, E('pre', res.log));
+							// 错误用 alert 常驻显示：不 reload、不自动消失，
+							// 用户看完手动关闭；仅在操作成功后 reload 刷新状态。
+							if (res && !res.ok) {
+								ui.addNotification(null, E('div', { 'class': 'alert alert-danger' }, _('Resize failed: ') + (res.error || res.message || '-')));
+								return;
+							}
+							window.location.reload();
+						}).catch(function(e) {
+							ui.addNotification(null, E('div', { 'class': 'alert alert-danger' }, _('Resize failed: ') + (e.message || e)));
+						});
+					}}, _('Resize now'))
 			])
 		]);
 	},

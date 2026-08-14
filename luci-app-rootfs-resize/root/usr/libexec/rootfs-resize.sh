@@ -94,7 +94,7 @@ resize() {
 	fi
 
 	if [ "$_part_sz" -ge "$_disk_sz" ]; then
-		printf "==> 分区 %s 已占满磁盘 %s，无需扩容。\n" "$_partdev" "$_disk"
+		printf "==> partition %s already fills disk %s, nothing to do.\n" "$_partdev" "$_disk"
 		status
 		return 0
 	fi
@@ -104,31 +104,37 @@ resize() {
 	#    用 gdisk 专家命令 e（把备份 GPT 重定位到磁盘末尾并重算 LastUsableLBA）修复。
 	#    磁盘正常时该操作幂等无害；gdisk 不存在则跳过，交给 parted 直接尝试。
 	if [ -x /usr/bin/gdisk ] || [ -x /usr/sbin/gdisk ]; then
-		printf "==> 修复 GPT 头到磁盘实际大小 (gdisk e)\n"
+		printf "==> fixing GPT header to actual disk size (gdisk e)\n"
 		printf 'x\ne\nw\ny\n' | gdisk "$_disk" >/dev/null 2>&1 || true
 		partprobe "$_disk" >/dev/null 2>&1 || true
+	else
+		printf "==> gdisk not installed, skipping GPT fix (install gdisk if parted fails)\n"
 	fi
 
-	printf "==> 扩大分区 %s 到磁盘末尾 (parted -s %s resizepart %s 100%%)\n" \
+	printf "==> extending partition %s to end of disk (parted -s %s resizepart %s 100%%)\n" \
 		"$_partdev" "$_disk" "$_part"
 	if ! parted -s "$_disk" resizepart "$_part" 100%; then
-		printf "!! parted 失败（可能是 GPT 头仍过期，或已用 gdisk 修复仍受限）。请确认分区表状态。\n"
+		printf "!! parted failed (GPT header may still be stale, or gdisk repair was insufficient). Check partition table state.\n"
+		# 失败也必须输出 JSON，否则上层 ucode 解析不到真实错误
+		printf '{"ok":false,"error":"parted failed: GPT header may still be stale, or gdisk repair was insufficient"}\n'
 		return 1
 	fi
 
-	printf "==> 刷新 loop 设备 %s (losetup -c)\n" "$_overlay_loop"
+	printf "==> refreshing loop device %s (losetup -c)\n" "$_overlay_loop"
 	if ! losetup -c "$_overlay_loop"; then
-		printf "!! losetup 刷新失败。\n"
+		printf "!! losetup refresh failed.\n"
+		printf '{"ok":false,"error":"losetup refresh failed"}\n'
 		return 1
 	fi
 
-	printf "==> 在线扩容 overlay 文件系统 (resize2fs %s)\n" "$_overlay_loop"
+	printf "==> resizing overlay filesystem online (resize2fs %s)\n" "$_overlay_loop"
 	if ! resize2fs "$_overlay_loop"; then
-		printf "!! resize2fs 失败。\n"
+		printf "!! resize2fs failed.\n"
+		printf '{"ok":false,"error":"resize2fs failed"}\n'
 		return 1
 	fi
 
-	printf "==> 扩容完成。\n"
+	printf "==> resize complete.\n"
 	status
 }
 
