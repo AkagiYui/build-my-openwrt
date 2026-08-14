@@ -246,8 +246,13 @@ jobs:
           done
           ls -lh files/usr/share/openclash/ui/*/index.html
 
-      # 默认 profile=generic 即产出 squashfs-combined-efi.img.gz（官方默认 CONFIG_GRUB_EFI_IMAGES=y）。
-      # ROOTFS_PARTSIZE=512：默认 104MB，OpenClash+mihomo+geo 数据库（~25MB）后 squashfs+overlay 吃紧，调大留余量。
+      # 镜像类型：ext4-combined-efi（root 为 ext4 直挂分区）。
+      # 此前 squashfs+f2fs 的 overlay 无法在线扩容（resize.f2fs 要求未挂载设备，
+      # 而 /overlay 是根 upperdir 卸载不了，实测损坏文件系统）；ext4 镜像 root 直挂
+      # 分区，parted resizepart + resize2fs 即可在线扩容（luci-app-rootfs-resize 的
+      # direct:ext4 分支直接可用）。
+      # ROOTFS_PARTSIZE=2048：ext4 无 squashfs 压缩，rootfs 常驻 ~700MB；2G 起步
+      # 给 overlay 留足空间（OpenClash+mihomo+geo 数据库等运行时增长）。
       # PACKAGES：把初始化文档里的运行时 apk add 提前固化进镜像
       #   - luci-i18n-base-zh-cn  中文界面
       #   - block-mount          挂载点/overlay 工具
@@ -279,7 +284,7 @@ jobs:
       - name: Build image
         run: |
           make image PROFILE=generic \
-            ROOTFS_PARTSIZE=512 \
+            ROOTFS_PARTSIZE=2048 \
             PACKAGES="luci luci-i18n-base-zh-cn luci-i18n-package-manager-zh-cn luci-i18n-firewall-zh-cn \
               rpcd-mod-iwinfo rpcd-mod-rpcsys rpcd-mod-rrdns ucode-mod-uclient libiwinfo20230701 libiwinfo-data \
               block-mount openssh-sftp-server losetup resize2fs parted gdisk f2fs-tools btop nano \

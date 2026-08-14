@@ -1,6 +1,6 @@
 # build-my-openwrt
 
-基于**官方 OpenWrt Image Builder** 构建 `x86_64 generic squashfs-combined-efi` 镜像，
+基于**官方 OpenWrt Image Builder** 构建 `x86_64 generic ext4-combined-efi` 镜像，
 并把 `初始化.md` 里的运行时 `apk add` 与配置改动**提前固化进镜像**，部署后开箱即用。
 
 ## 原理
@@ -103,28 +103,30 @@ OpenClash / Argon / Shadcn 不在官方 feed 里，workflow 构建时用 `gh rel
   - 运行时按需从网易拉更新，开机自启由 init 脚本拉起，无需手动安装
 - 想锁版本：把 `--pattern` 换成具体文件名，或加 `--tag v0.47.156` 等。
 
-> `ROOTFS_PARTSIZE=512`：官方默认 104MB，OpenClash+mihomo+geo 数据库（~40MB）后 squashfs+overlay 会吃紧，workflow 已调大留余量。
+> `ROOTFS_PARTSIZE=2048`：改用 **ext4** 镜像（root 直挂分区，可在线扩容）。ext4 无
+> squashfs 压缩，rootfs 常驻 ~700MB，2G 起步给 overlay 留足空间（OpenClash+mihomo+geo
+> 数据库等运行时增长）。squashfs+f2fs 的 overlay 无法在线扩容（resize.f2fs 要求未挂载
+> 设备，而 /overlay 是根 upperdir 卸载不了），故弃用。
 
 ## 产物
 
 `make image PROFILE=generic` 默认产出（`bin/targets/x86/64/`）：
 
-- `openwrt-25.12.5-x86-64-generic-squashfs-combined-efi.img.gz` ← PVE UEFI 用这个
-- `...-squashfs-combined.img.gz`（legacy BIOS）
-- `...-ext4-combined-efi.img.gz`、rootfs 等
+- `openwrt-25.12.5-x86-64-generic-ext4-combined-efi.img.gz` ← PVE UEFI 用这个（root=ext4，可在线扩容）
+- `...-squashfs-combined-efi.img.gz`（squashfs 只读压缩层，overlay=f2fs，**无法在线扩容**）
 
 ## PVE 部署
 
-镜像（`squashfs-combined-efi`）**必须**用 UEFI 引导：`q35 + OVMF`，legacy BIOS 起不来。
+镜像（`ext4-combined-efi`）**必须**用 UEFI 引导：`q35 + OVMF`，legacy BIOS 起不来。
 以下流程在 **PVE 9.2.5 + 目录存储 `local`** 实机验证通过（2026-08，VMID 101）。
 
 ### 1. 获取镜像
 
 Actions → *Build OpenWrt x86_64 combined-efi* → 下载 Artifacts，
-把 `openwrt-25.12.5-x86-64-generic-squashfs-combined-efi.img.gz` 上传到 PVE 宿主机（如 `/var/lib/vz/template/iso/`）：
+把 `openwrt-25.12.5-x86-64-generic-ext4-combined-efi.img.gz` 上传到 PVE 宿主机（如 `/var/lib/vz/template/iso/`）：
 
 ```sh
-gunzip openwrt-25.12.5-x86-64-generic-squashfs-combined-efi.img.gz
+gunzip openwrt-25.12.5-x86-64-generic-ext4-combined-efi.img.gz
 ```
 
 ### 2. 命令行部署（以 VMID 100 为例）
@@ -138,7 +140,7 @@ qm create 100 --name openwrt --memory 512 --machine q35 --bios ovmf \
   --scsihw virtio-scsi-single --agent 1 --net0 virtio,bridge=vmbr0
 
 # 导入镜像到 local 存储（目录存储，生成 vm-100-disk-0）
-qm importdisk 100 openwrt-25.12.5-x86-64-generic-squashfs-combined-efi.img local --format raw
+qm importdisk 100 openwrt-25.12.5-x86-64-generic-ext4-combined-efi.img local --format raw
 
 # 挂载磁盘 + EFI 启动盘 + 设启动顺序
 # 目录存储的卷名 = 完整文件名（必须带 .raw 扩展名）：
@@ -231,12 +233,19 @@ netctl side [IP] [GW]     # 旁路由模式：不传=192.168.1.2/.1；只传IP=�
 `luci-app-rootfs-resize/` 是一个独立 LuCI 插件：把 `初始化.md` 的 overlay 扩容流程抽象化，
 做成"检测 + 一键扩容"（`parted resizepart → losetup -c → resize2fs`，在线、无需重启）。
 
-- **抽象化**：自动定位 overlay 的 loop 设备 → backing 根分区 → 整个磁盘，
+- **已预烘焙进固件**：构建时按 Makefile 布局复制进 `files/`（等价 apk 安装后的落点），
+  LuCI 菜单：系统 → Rootfs 扩容，开箱即用。
+- **双镜像模式**：
+  - **ext4-combined-efi（本固件默认）**：root 直挂分区，检测到 root 设备直接
+    `parted resizepart → resize2fs` **在线扩容**，PVE `qm resize` 后点一键即生效；
+  - squashfs+f2fs（旧版）：f2fs 无法在线扩容（resize.f2fs 需未挂载设备，/overlay 是根
+    upperdir 卸载不了），插件会明确报错并提示换 ext4 镜像。
+- **抽象化**：自动定位 overlay 的 loop 设备 / root 分区 → 整个磁盘，
   兼容 `sda2` / `vda2` / `nvme0n1p2` / `mmcblk0p2` 等设备命名，不写死 /dev/sda。
 - **结构**：`root/usr/libexec/rootfs-resize.sh`（核心逻辑，输出 JSON）+
   ucode rpcd 后端 + JS view（LuCI 菜单：系统 → Rootfs 扩容）。
-- **编译**：`.github/workflows/build-plugin.yml` 用官方 `ghcr.io/openwrt/sdk:x86_64-25.12.5`
-  容器直接编出 `.apk`（25.12 为 apk 体系），上传 Artifact，**未加入固件镜像**。
+- **独立编译**：`.github/workflows/build-plugin.yml` 用官方 `ghcr.io/openwrt/sdk:x86_64-25.12.5`
+  容器直接编出 `.apk`（25.12 为 apk 体系），上传 Artifact，可手动安装到其他设备。
 - **设备安装**（未签名包）：
   ```sh
   scp out/luci-app-rootfs-resize-*.apk root@<router>:/tmp/

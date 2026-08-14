@@ -18,31 +18,46 @@ ACTION="${1:-status}"
 
 # ---------- 检测 ----------
 detect() {
-	# 1. overlay 的 loop 设备 (/overlay 挂在 /dev/loopX)
+	# 两种镜像布局：
+	#   A. squashfs 镜像：/overlay 挂在 /dev/loopX（f2fs/ext4），loop 再背靠根分区
+	#   B. ext4 镜像：/ 直接挂在 /dev/sdX2（ext4），overlay 在 root 分区内的 upper 目录
 	_overlay_loop=$(awk '$2=="/overlay" && $1 ~ /^\/dev\/loop/ {print $1; exit}' /proc/mounts 2>/dev/null)
-	[ -n "$_overlay_loop" ] || { _err="找不到 overlay 的 loop 设备"; return 1; }
+	_rootdev=$(awk '$2=="/" {print $1}' /proc/mounts 2>/dev/null)
 
-	# 2. loop 的 backing 分区 (/dev/loop0: [..]:.. (/sda2), offset ..)
-	_partdev=$(losetup -a 2>/dev/null | sed -n "s|^${_overlay_loop}: .*(\(/[^)]*\)).*|\1|p" | head -n1)
-	[ -n "$_partdev" ] || { _err="无法从 loop 定位 backing 分区"; return 1; }
+	if [ -n "$_overlay_loop" ]; then
+		# --- 模式 A: loop 背靠分区（squashfs 镜像）---
+		_partdev=$(losetup -a 2>/dev/null | sed -n "s|^${_overlay_loop}: .*(\(/[^)]*\)).*|\1|p" | head -n1)
+		[ -n "$_partdev" ] || { _err="unable to locate backing partition from loop"; return 1; }
+		_loop_sz=$(cat "/sys/block/$(basename "$_overlay_loop")/size" 2>/dev/null || echo 0)
+		_fstype=$(awk '$2=="/overlay" {print $3}' /proc/mounts 2>/dev/null)
+		_fs_base=$_loop_sz
+		_mode=loop
+	else
+		# --- 模式 B: root 直挂分区（ext4 镜像）---
+		[ -n "$_rootdev" ] && [ -n "${_rootdev#/dev/loop}" ] && [ -n "${_rootdev#/dev/root}" ] || {
+			_err="cannot determine root device"; return 1; }
+		_partdev=$_rootdev
+		_loop_sz=0
+		_fstype=$(awk '$2=="/" {print $3}' /proc/mounts 2>/dev/null)
+		_fs_base=0
+		_mode=direct
+	fi
 
-	# 3. 分区号 与 整个磁盘设备
+	# 分区号 与 整个磁盘设备
 	_bn=$(basename "$_partdev")                                   # sda2 / nvme0n1p2 / mmcblk0p2
 	_part=$(echo "$_bn" | grep -oE '[0-9]+$')                     # 2
 	_disk="/dev/$(echo "$_bn" | sed 's/p[0-9][0-9]*$//; s/[0-9][0-9]*$//')"  # /dev/sda / /dev/nvme0n1
-	[ -n "$_part" ] && [ -n "$_disk" ] || { _err="无法解析分区设备 $_partdev"; return 1; }
+	[ -n "$_part" ] && [ -n "$_disk" ] || { _err="cannot parse partition device $_partdev"; return 1; }
 
-	# 4. 扇区大小 (sysfs)
+	# 扇区大小 (sysfs)
 	_disk_sz=$(cat "/sys/block/$(basename "$_disk")/size" 2>/dev/null || echo 0)
 	_part_sz=$(cat "/sys/block/$(basename "$_disk")/$_bn/size" 2>/dev/null || echo 0)
-	_loop_sz=$(cat "/sys/block/$(basename "$_overlay_loop")/size" 2>/dev/null || echo 0)
 
-	# 5. 预计可扩容空间：磁盘容量 - 当前 overlay 文件系统容量（扇区）
-	#    （parted 扩分区 + losetup 刷新 + resize2fs 后文件系统最多长到磁盘末尾）
-	_free_sz=$((_disk_sz - _loop_sz))
+	# 预计可扩容空间：磁盘容量 - 当前文件系统容量（模式A=loop，模式B=分区）
+	_free_sz=$((_disk_sz - _fs_base))
 	[ "$_free_sz" -lt 0 ] && _free_sz=0
 
-	# 6. overlay 文件系统用量 (KB)
+	# overlay 文件系统用量 (KB)
 	_ovl_size=$(df -k /overlay 2>/dev/null | awk 'NR==2{print $2}')
 	_ovl_used=$(df -k /overlay 2>/dev/null | awk 'NR==2{print $3}')
 	_ovl_avail=$(df -k /overlay 2>/dev/null | awk 'NR==2{print $4}')
@@ -121,33 +136,31 @@ resize() {
 	fi
 
 	printf "==> refreshing loop device %s (losetup -c)\n" "$_overlay_loop"
-	if ! losetup -c "$_overlay_loop"; then
+	if ! losetup -c "$_overlay_loop" 2>/dev/null; then
 		printf "!! losetup refresh failed.\n"
 		printf '{"ok":false,"error":"losetup refresh failed"}\n'
 		return 1
 	fi
 
-	# overlay 文件系统类型：f2fs（OpenWrt 默认）→ resize.f2fs；ext4 → resize2fs
-	_fstype=$(awk '$2=="/overlay" {print $3}' /proc/mounts 2>/dev/null)
-	case "$_fstype" in
-		f2fs)
-			printf "==> resizing overlay filesystem online (resize.f2fs %s)\n" "$_overlay_loop"
-			if ! resize.f2fs "$_overlay_loop" 2>&1; then
-				printf "!! resize.f2fs failed.\n"
-				printf '{"ok":false,"error":"resize.f2fs failed"}\n'
-				return 1
-			fi
-			;;
-		ext4)
-			printf "==> resizing overlay filesystem online (resize2fs %s)\n" "$_overlay_loop"
-			if ! resize2fs "$_overlay_loop"; then
+	# 文件系统扩容：ext4 在线（resize2fs）；f2fs 无在线扩（需未挂载设备，overlay 卸载不了）
+	case "$_mode:$_fstype" in
+		direct:ext4|loop:ext4)
+			_fsdev="$_partdev"
+			[ "$_mode" = "loop" ] && _fsdev="$_overlay_loop"
+			printf "==> resizing overlay filesystem online (resize2fs %s)\n" "$_fsdev"
+			if ! resize2fs "$_fsdev" 2>&1; then
 				printf "!! resize2fs failed.\n"
 				printf '{"ok":false,"error":"resize2fs failed"}\n'
 				return 1
 			fi
 			;;
+		loop:f2fs)
+			printf "!! f2fs overlay cannot be resized online (resize.f2fs requires an unmounted device, and /overlay is the root upperdir).\n"
+			printf '{"ok":false,"error":"f2fs overlay cannot be resized online; use the ext4 image instead"}\n'
+			return 1
+			;;
 		*)
-			printf "!! unsupported overlay filesystem type: %s\n" "$_fstype"
+			printf "!! unsupported overlay filesystem type: %s (mode %s)\n" "$_fstype" "$_mode"
 			printf '{"ok":false,"error":"unsupported overlay filesystem type %s"}\n' "$_fstype"
 			return 1
 			;;
