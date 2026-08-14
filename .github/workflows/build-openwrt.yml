@@ -201,6 +201,30 @@ jobs:
             files/usr/lib/luci/i18n/uugamebooster.zh-cn.lmo
           ls -lh files/usr/bin/uugamebooster files/usr/lib/luci/i18n/uugamebooster.zh-cn.lmo
 
+      # 预烘焙自研插件 luci-app-rootfs-resize（一键扩容 overlay）：
+      # 与 UU 同路线——插件源码在仓库内，但 build-openwrt 不编译 SDK，这里直接把
+      # 插件文件按 Makefile 的 install 段布局复制进 files/（等价于 apk 安装后的文件落点）：
+      #   usr/libexec/rootfs-resize.sh ← INSTALL_BIN
+      #   usr/share/rpcd/ucode|acl.d、usr/share/luci/menu.d、www/luci-static/...、etc/uci-defaults
+      # 中文 lmo 复用上一步现场编译的 po2lmo（同一 runner，/tmp 跨步骤保留）。
+      - name: Prebake luci-app-rootfs-resize into image
+        run: |
+          set -euo pipefail
+          SRC="$GITHUB_WORKSPACE/luci-app-rootfs-resize"
+          mkdir -p files/usr/libexec files/usr/share/rpcd/ucode files/usr/share/rpcd/acl.d \
+                   files/usr/share/luci/menu.d files/www/luci-static/resources/view/rootfsresize \
+                   files/etc/uci-defaults files/usr/lib/lua/luci/i18n
+          install -m 0755 "$SRC/root/usr/libexec/rootfs-resize.sh" files/usr/libexec/
+          install -m 0644 "$SRC/root/usr/share/rpcd/ucode/rootfs-resize.uc" files/usr/share/rpcd/ucode/
+          install -m 0644 "$SRC/root/usr/share/rpcd/acl.d/luci-app-rootfs-resize.json" files/usr/share/rpcd/acl.d/
+          install -m 0644 "$SRC/root/usr/share/luci/menu.d/luci-app-rootfs-resize.json" files/usr/share/luci/menu.d/
+          install -m 0644 "$SRC/htdocs/luci-static/resources/view/rootfsresize/overview.js" \
+            files/www/luci-static/resources/view/rootfsresize/
+          install -m 0644 "$SRC/root/etc/uci-defaults/50-rootfs-resize" files/etc/uci-defaults/
+          /tmp/po2lmo-src/po2lmo "$SRC/po/zh-cn/luci-app-rootfs-resize.po" \
+            files/usr/lib/lua/luci/i18n/rootfs-resize.zh-cn.lmo
+          find files -path "*rootfs-resize*" -o -name "rootfs-resize*" | sort
+
       # 预置最新版 OpenClash Web 控制面板（metacubexd / zashboard）。
       # OpenClash .apk 内置的 ui 目录是 release 打包时固化的，滞后于上游；这里构建时直接从
       # 上游 gh-pages 分支拉取最新（与 OpenClash openclash_download_dashboard.sh 同源同路径）：
