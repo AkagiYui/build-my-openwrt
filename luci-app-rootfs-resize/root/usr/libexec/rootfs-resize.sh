@@ -127,12 +127,31 @@ resize() {
 		return 1
 	fi
 
-	printf "==> resizing overlay filesystem online (resize2fs %s)\n" "$_overlay_loop"
-	if ! resize2fs "$_overlay_loop"; then
-		printf "!! resize2fs failed.\n"
-		printf '{"ok":false,"error":"resize2fs failed"}\n'
-		return 1
-	fi
+	# overlay 文件系统类型：f2fs（OpenWrt 默认）→ resize.f2fs；ext4 → resize2fs
+	_fstype=$(awk '$2=="/overlay" {print $3}' /proc/mounts 2>/dev/null)
+	case "$_fstype" in
+		f2fs)
+			printf "==> resizing overlay filesystem online (resize.f2fs %s)\n" "$_overlay_loop"
+			if ! resize.f2fs "$_overlay_loop" 2>&1; then
+				printf "!! resize.f2fs failed.\n"
+				printf '{"ok":false,"error":"resize.f2fs failed"}\n'
+				return 1
+			fi
+			;;
+		ext4)
+			printf "==> resizing overlay filesystem online (resize2fs %s)\n" "$_overlay_loop"
+			if ! resize2fs "$_overlay_loop"; then
+				printf "!! resize2fs failed.\n"
+				printf '{"ok":false,"error":"resize2fs failed"}\n'
+				return 1
+			fi
+			;;
+		*)
+			printf "!! unsupported overlay filesystem type: %s\n" "$_fstype"
+			printf '{"ok":false,"error":"unsupported overlay filesystem type %s"}\n' "$_fstype"
+			return 1
+			;;
+	esac
 
 	printf "==> resize complete.\n"
 	status

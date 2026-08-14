@@ -282,7 +282,7 @@ jobs:
             ROOTFS_PARTSIZE=512 \
             PACKAGES="luci luci-i18n-base-zh-cn luci-i18n-package-manager-zh-cn luci-i18n-firewall-zh-cn \
               rpcd-mod-iwinfo rpcd-mod-rpcsys rpcd-mod-rrdns ucode-mod-uclient libiwinfo20230701 libiwinfo-data \
-              block-mount openssh-sftp-server losetup resize2fs parted gdisk btop nano \
+              block-mount openssh-sftp-server losetup resize2fs parted gdisk f2fs-tools btop nano \
               luci-app-openclash luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn \
               luci-theme-shadcn \
               luci-app-filemanager luci-i18n-filemanager-zh-cn luci-app-ttyd luci-i18n-ttyd-zh-cn \
