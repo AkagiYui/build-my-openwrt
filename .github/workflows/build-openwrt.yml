@@ -284,8 +284,11 @@ jobs:
       # FILES：把初始化文档里的配置改动固化（network / system / profile.d）
       - name: Build image
         run: |
+          # 去掉 ext4 镜像产物：304 个包不压缩 ~700MB 超出 104MB 分区会构建失败；
+          # squashfs 压缩后 ~52MB 正常。命令行 CONFIG_TARGET_ROOTFS_EXT4FS=n 不生效
+          # （OpenWrt config 系统），需直接改 .config。
+          sed -i 's/^CONFIG_TARGET_ROOTFS_EXT4FS=y/CONFIG_TARGET_ROOTFS_EXT4FS=n/' .config
           make image PROFILE=generic \
-            CONFIG_TARGET_ROOTFS_EXT4FS=n \
             PACKAGES="luci luci-i18n-base-zh-cn luci-i18n-package-manager-zh-cn luci-i18n-firewall-zh-cn \
               rpcd-mod-iwinfo rpcd-mod-rpcsys rpcd-mod-rrdns ucode-mod-uclient libiwinfo20230701 libiwinfo-data \
               block-mount openssh-sftp-server losetup resize2fs parted gdisk btop nano \
