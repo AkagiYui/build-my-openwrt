@@ -133,8 +133,9 @@ gunzip openwrt-25.12.5-x86-64-generic-squashfs-combined-efi.img.gz
 # 建 VM：q35 + OVMF（UEFI），virtio 网卡接 vmbr0
 # 注意 --scsihw virtio-scsi-single 必须显式指定：默认 lsi 控制器会让
 # OVMF 读不到磁盘 → 启动时 BdsDxe: No bootable device（本次实机踩坑根因）。
+# --agent 1 启用 QEMU guest agent（固件已内置 qemu-ga，PVE 可 qm agent <VMID> exec/ping）。
 qm create 100 --name openwrt --memory 512 --machine q35 --bios ovmf \
-  --scsihw virtio-scsi-single --net0 virtio,bridge=vmbr0
+  --scsihw virtio-scsi-single --agent 1 --net0 virtio,bridge=vmbr0
 
 # 导入镜像到 local 存储（目录存储，生成 vm-100-disk-0）
 qm importdisk 100 openwrt-25.12.5-x86-64-generic-squashfs-combined-efi.img local --format raw
@@ -148,6 +149,8 @@ qm set 100 --scsi0 local:100/vm-100-disk-0.raw
 # EFI 盘：不要加 pre-enrolled-keys=1！那会启用 Secure Boot，
 # OpenWrt 的 GRUB 无微软签名 → 启动时 BdsDxe: No bootable device。
 qm set 100 --efidisk0 local:1,efitype=4m
+# 串口：PVE Web 控制台 → xterm.js 可直连 OpenWrt shell（固件 grub 已配 console=ttyS0）
+qm set 100 --serial0 socket
 qm set 100 --boot order=scsi0
 
 qm start 100
@@ -160,11 +163,13 @@ qm start 100
 ### 3. Web UI 等效操作
 
 1. **创建 VM**：General 页选「无介质」，Machine 选 **q35**，BIOS 选 **OVMF (UEFI)**，
-   磁盘控制器选 **VirtIO SCSI (single)**（别用默认 LSI，否则 no bootable device），不建磁盘；
+   磁盘控制器选 **VirtIO SCSI (single)**（别用默认 LSI，否则 no bootable device），
+   **Agent 勾选「QEMU agent」（即 agent:1）**，不建磁盘；
 2. **导入镜像**：节点 → `local` 存储 → ISO 镜像 → 上传解压后的 `.img`；
 3. **硬件** → 添加 → 磁盘 → 选刚上传的镜像（Bus/Device 选 VirtIO Block 或 SCSI），格式 raw；
 4. **选项** → EFI 磁盘 → 添加（efitype=4m，**不要勾 pre-enrolled-keys**）；
-5. **选项** → 引导顺序 → 只留 scsi0，启动。
+5. **硬件** → 添加 → 串口 → 选 Socket（对应 `--serial0 socket`，xterm.js 控制台用）；
+6. **选项** → 引导顺序 → 只留 scsi0，启动。
 
 ### 4. 启动后
 
