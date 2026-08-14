@@ -103,7 +103,10 @@ OpenClash / Argon / Shadcn 不在官方 feed 里，workflow 构建时用 `gh rel
   - 运行时按需从网易拉更新，开机自启由 init 脚本拉起，无需手动安装
 - 想锁版本：把 `--pattern` 换成具体文件名，或加 `--tag v0.47.156` 等。
 
-> `ROOTFS_PARTSIZE=512`：官方默认 104MB，OpenClash+mihomo+geo 数据库（~40MB）后 squashfs+overlay 会吃紧，workflow 已调大留余量。
+> `ROOTFS_PARTSIZE`：**保持官方默认 104MB，不要调大**。fstools 的 `use_f2fs()`
+> 按 rootfs_data 剩余容量选 overlay 文件系统：剩余 > 100MiB → f2fs（无法在线扩容），
+> 否则 ext4（可在线扩容）。官方默认 104MB → ext4 overlay，配 rootfs-resize 插件
+> 一键扩容到整盘。早期调 512MB 导致 f2fs overlay 的坑已修复（详见 git log）。
 
 ## 产物
 
@@ -111,7 +114,7 @@ OpenClash / Argon / Shadcn 不在官方 feed 里，workflow 构建时用 `gh rel
 
 - `openwrt-25.12.5-x86-64-generic-squashfs-combined-efi.img.gz` ← PVE UEFI 用这个
 - `...-squashfs-combined.img.gz`（legacy BIOS）
-- `...-ext4-combined-efi.img.gz`、rootfs 等
+- `...-squashfs-rootfs.img.gz`（rootfs，ext4 镜像产物已禁用）
 
 ## PVE 部署
 
@@ -233,8 +236,9 @@ netctl side [IP] [GW]     # 旁路由模式：不传=192.168.1.2/.1；只传IP=�
 
 - **已预烘焙进固件**：构建时按 Makefile 布局复制进 `files/`（等价 apk 安装后的落点），
   LuCI 菜单：系统 → Rootfs 扩容，开箱即用。
-- **镜像适配**：支持两种布局——squashfs 镜像（overlay 在 loop 设备上，f2fs/ext4）
-  与 ext4 镜像（root 直挂分区）；自动识别，f2fs 分支会给出明确的扩容指引。
+- **镜像适配**：自动识别两种布局——squashfs 镜像（overlay 在 loop 设备上，
+  ext4 可在线扩 / f2fs 无法在线扩）与 ext4 镜像（root 直挂分区）。
+  本固件（squashfs + 默认 104MB 分区）= ext4 overlay，一键在线扩容可用。
 - **抽象化**：自动定位 overlay 的 loop 设备 / root 分区 → 整个磁盘，
   兼容 `sda2` / `vda2` / `nvme0n1p2` / `mmcblk0p2` 等设备命名，不写死 /dev/sda。
 - **结构**：`root/usr/libexec/rootfs-resize.sh`（核心逻辑，输出 JSON）+
